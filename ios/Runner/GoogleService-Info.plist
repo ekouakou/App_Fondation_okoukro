@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyC3V9JGuYbVViVpx2KW7LZdH3mz_OGN_hs</string>
+	<key>GCM_SENDER_ID</key>
+	<string>833147631416</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>dev.ekdev.fondationokoukroapp</string>
+	<key>PROJECT_ID</key>
+	<string>fondation-okoukro-app</string>
+	<key>STORAGE_BUCKET</key>
+	<string>fondation-okoukro-app.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:833147631416:ios:a9b4654680ab12e2aff3cd</string>
+</dict>
+</plist>

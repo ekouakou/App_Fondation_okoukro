@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Règles pour la collection des adhérents
+    match /adherents/{adherentId} {
+      allow read, write: if request.auth != null;
+      allow get: if request.auth != null;
+      allow list: if request.auth != null;
+    }
+    
+    // Règles pour la collection des cotisations
+    match /cotisations/{cotisationId} {
+      allow read, write: if request.auth != null;
+      allow get: if request.auth != null;
+      allow list: if request.auth != null;
+    }
+    
+    // Règles pour la collection des paiements
+    match /paiements/{paiementId} {
+      allow read, write: if request.auth != null;
+      allow get: if request.auth != null;
+      allow list: if request.auth != null;
+    }
+    
+    // Règles pour la collection des bénéfices
+    match /benefices/{beneficeId} {
+      allow read, write: if request.auth != null;
+      allow get: if request.auth != null;
+      allow list: if request.auth != null;
+    }
+    
+    // Règles pour la collection des rapports
+    match /rapports/{rapportId} {
+      allow read, write: if request.auth != null;
+      allow get: if request.auth != null;
+      allow list: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+    
+    // Règles par défaut - refuser l'accès
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

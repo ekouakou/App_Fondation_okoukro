@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "833147631416",
+    "project_id": "fondation-okoukro-app",
+    "storage_bucket": "fondation-okoukro-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:833147631416:android:ce047cb211a78e37aff3cd",
+        "android_client_info": {
+          "package_name": "dev.ekdev.fondation_okoukro_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBnYSXMQDXNfZtCT4tibGLRx-3bzb7vlk4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
