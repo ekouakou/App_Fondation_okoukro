@@ -139,6 +139,14 @@ class FirebaseService {
     }
   }
 
+  static Future<void> deleteCotisation(String cotisationId) async {
+    try {
+      await _firestore.collection(_collectionCotisations).doc(cotisationId).delete();
+    } catch (e) {
+      throw Exception('Erreur lors de la suppression de la cotisation: $e');
+    }
+  }
+
   // ===== OPÉRATIONS PAIEMENTS =====
   
   static Future<String> insertPaiement(Paiement paiement) async {

@@ -8,6 +8,9 @@ import '../models/adherent.dart';
 import '../utils/constants.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/empty_state_widget.dart';
+import '../config/app_colors.dart';
+import '../services/theme_service.dart';
+import '../widgets/searchable_adherent_dropdown.dart';
 
 class CotisationsScreen extends ConsumerStatefulWidget {
   @override
@@ -18,6 +21,7 @@ class _CotisationsScreenState extends ConsumerState<CotisationsScreen> {
   int anneeSelectionnee = DateTime.now().year;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  String? _expandedCardKey;
 
   @override
   void dispose() {
@@ -172,15 +176,103 @@ class _CotisationsScreenState extends ConsumerState<CotisationsScreen> {
   }
 
   Widget _buildCotisationCard(Cotisation cotisation, Adherent adherent) {
-    return Card(
+    final cardKey = cotisation.id; // Utiliser l'ID unique de la cotisation
+    final isExpanded = _expandedCardKey == cardKey;
+    
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 300),
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: cotisation.estSoldee 
-              ? Colors.green.withOpacity(0.1) 
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white,
+            cotisation.estSoldee 
+                ? Colors.green.withOpacity(0.02)
+                : cotisation.montantPaye > 0 
+                    ? Colors.orange.withOpacity(0.02)
+                    : Colors.red.withOpacity(0.02),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: isExpanded ? 12 : 6,
+            offset: Offset(0, isExpanded ? 6 : 3),
+          ),
+        ],
+        border: Border.all(
+          color: cotisation.estSoldee 
+              ? Colors.green.withOpacity(0.2)
               : cotisation.montantPaye > 0 
-                  ? Colors.orange.withOpacity(0.1)
-                  : Colors.red.withOpacity(0.1),
+                  ? Colors.orange.withOpacity(0.2)
+                  : Colors.red.withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _toggleCardExpansion(cardKey),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _buildCardHeader(cotisation, adherent, isExpanded),
+                SizedBox(height: 12),
+                _buildCardProgress(cotisation),
+                if (isExpanded) ...[
+                  SizedBox(height: 16),
+                  _buildCardActions(cotisation, adherent),
+                ] else ...[
+                  SizedBox(height: 8),
+                  _buildCompactActions(cotisation, adherent),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _toggleCardExpansion(String cardKey) {
+    setState(() {
+      if (_expandedCardKey == cardKey) {
+        _expandedCardKey = null; // Fermer la carte actuelle
+      } else {
+        _expandedCardKey = cardKey; // Ouvrir la nouvelle carte (fermer automatiquement l'ancienne)
+      }
+    });
+  }
+
+  Widget _buildCardHeader(Cotisation cotisation, Adherent adherent, bool isExpanded) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                cotisation.estSoldee 
+                    ? Colors.green.withOpacity(0.15)
+                    : cotisation.montantPaye > 0 
+                        ? Colors.orange.withOpacity(0.15)
+                        : Colors.red.withOpacity(0.15),
+                cotisation.estSoldee 
+                    ? Colors.green.withOpacity(0.05)
+                    : cotisation.montantPaye > 0 
+                        ? Colors.orange.withOpacity(0.05)
+                        : Colors.red.withOpacity(0.05),
+              ],
+            ),
+          ),
           child: Icon(
             cotisation.estSoldee 
                 ? Icons.check_circle 
@@ -188,90 +280,421 @@ class _CotisationsScreenState extends ConsumerState<CotisationsScreen> {
                     ? Icons.pending
                     : Icons.money_off,
             color: cotisation.estSoldee 
-                ? Colors.green 
+                ? Colors.green.shade600
                 : cotisation.montantPaye > 0 
-                    ? Colors.orange
-                    : Colors.red,
+                    ? Colors.orange.shade600
+                    : Colors.red.shade600,
+            size: 24,
           ),
         ),
-        title: Text('Année ${cotisation.annee}'),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Adhérent: ${adherent.nomComplet}'),
-            SizedBox(height: 4),
-            Text('Contribution: ${cotisation.montantFormate}'),
-            SizedBox(height: 4),
-            Row(
-              children: [
-                Text('Payé: ${cotisation.montantPayeFormate}'),
-                SizedBox(width: 8),
-                Text('(${cotisation.pourcentagePaye.toStringAsFixed(1)}%)'),
-              ],
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Reste: ${cotisation.resteFormate}',
-              style: TextStyle(
-                color: cotisation.resteAPayer > 0 ? Colors.red : Colors.green,
-                fontWeight: FontWeight.bold,
+        SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                adherent.nomComplet,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Statut: ${cotisation.statut}',
-              style: TextStyle(
-                color: cotisation.estSoldee 
-                    ? Colors.green 
-                    : cotisation.montantPaye > 0 
-                        ? Colors.orange
-                        : Colors.red,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Modifié le: ${DateFormat('dd MMM yyyy').format(cotisation.dateModification)}',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-            if (cotisation.motifModification != null) ...[
               SizedBox(height: 4),
               Text(
-                'Motif: ${cotisation.motifModification}',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                'Année ${cotisation.annee}',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            color: cotisation.estSoldee 
+                ? Colors.green.withOpacity(0.1)
+                : cotisation.montantPaye > 0 
+                    ? Colors.orange.withOpacity(0.1)
+                    : Colors.red.withOpacity(0.1),
+          ),
+          child: Text(
+            cotisation.statut,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: cotisation.estSoldee 
+                  ? Colors.green.shade700
+                  : cotisation.montantPaye > 0 
+                      ? Colors.orange.shade700
+                      : Colors.red.shade700,
+            ),
+          ),
+        ),
+        SizedBox(width: 8),
+        AnimatedRotation(
+          turns: isExpanded ? 0.5 : 0,
+          duration: Duration(milliseconds: 300),
+          child: Icon(
+            Icons.keyboard_arrow_down,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCardProgress(Cotisation cotisation) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Progression du paiement',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Text(
+              '${cotisation.pourcentagePaye.toStringAsFixed(1)}%',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: cotisation.estSoldee 
+                    ? Colors.green.shade600
+                    : cotisation.montantPaye > 0 
+                        ? Colors.orange.shade600
+                        : Colors.red.shade600,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 8),
+        Container(
+          height: 8,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: Colors.grey.shade200,
+          ),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: cotisation.pourcentagePaye / 100,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                gradient: LinearGradient(
+                  colors: [
+                    cotisation.estSoldee 
+                        ? Colors.green.shade400
+                        : cotisation.montantPaye > 0 
+                            ? Colors.orange.shade400
+                            : Colors.red.shade400,
+                    cotisation.estSoldee 
+                        ? Colors.green.shade600
+                        : cotisation.montantPaye > 0 
+                            ? Colors.orange.shade600
+                            : Colors.red.shade600,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Total',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+                Text(
+                  cotisation.montantFormate,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'Payé',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+                Text(
+                  cotisation.montantPayeFormate,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: cotisation.montantPaye > 0 ? Colors.green.shade600 : Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'Reste',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+                Text(
+                  cotisation.resteFormate,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: cotisation.resteAPayer > 0 ? Colors.red.shade600 : Colors.green.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+  Widget _buildCardActions(Cotisation cotisation, Adherent adherent) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => _showEditCotisationDialog(cotisation, adherent),
+            icon: Icon(Icons.edit, size: 14),
+            label: Text('Modifier'),
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              side: BorderSide(color: AppColors.primary),
+              foregroundColor: AppColors.primary,
+              minimumSize: Size(0, 32),
+              textStyle: TextStyle(fontSize: 12),
+            ),
+          ),
+        ),
+        SizedBox(width: 6),
+        if (!cotisation.estSoldee)
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _showPaymentDialog(cotisation, adherent),
+              icon: Icon(Icons.payment, size: 14),
+              label: Text('Payé'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                minimumSize: Size(0, 32),
+                textStyle: TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
+        if (!cotisation.estSoldee) SizedBox(width: 6),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => _showDeleteConfirmation(cotisation, adherent),
+            icon: Icon(Icons.delete, size: 14),
+            label: Text('Supprimer'),
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              side: BorderSide(color: Colors.red),
+              foregroundColor: Colors.red,
+              minimumSize: Size(0, 32),
+              textStyle: TextStyle(fontSize: 12),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactActions(Cotisation cotisation, Adherent adherent) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        if (!cotisation.estSoldee)
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              gradient: LinearGradient(
+                colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
+              ),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => _showPaymentDialog(cotisation, adherent),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.payment,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Payé',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showDeleteConfirmation(Cotisation cotisation, Adherent adherent) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.warning_amber,
+              color: Colors.orange,
+              size: 24,
+            ),
+            SizedBox(width: 12),
+            Text('Confirmer la suppression'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Êtes-vous sûr de vouloir supprimer cette cotisation ?',
+              style: TextStyle(fontSize: 16),
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Détails de la cotisation :',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text('Adhérent: ${adherent.nomComplet}'),
+                  Text('Année: ${cotisation.annee}'),
+                  Text('Montant: ${cotisation.montantFormate}'),
+                  Text('Payé: ${cotisation.montantPayeFormate}'),
+                  Text('Statut: ${cotisation.statut}'),
+                ],
+              ),
+            ),
+            if (cotisation.montantPaye > 0) ...[
+              SizedBox(height: 12),
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.orange,
+                      size: 16,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Attention: Cette cotisation a déjà des paiements enregistrés.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
         ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              cotisation.statut,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: cotisation.estSoldee 
-                    ? Colors.green 
-                    : cotisation.montantPaye > 0 
-                        ? Colors.orange
-                        : Colors.red,
-                fontSize: 12,
-              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Annuler'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteCotisation(cotisation);
+            },
+            icon: Icon(Icons.delete, size: 16),
+            label: Text('Supprimer'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
             ),
-            SizedBox(height: 4),
-            if (!cotisation.estSoldee)
-              ElevatedButton(
-                onPressed: () => _showPaymentDialog(cotisation, adherent),
-                child: Text('Payer'),
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  minimumSize: Size(0, 24),
-                ),
-              ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteCotisation(Cotisation cotisation) {
+    ref.read(cotisationProvider.notifier).deleteCotisation(cotisation.id);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text('Cotisation supprimée avec succès!'),
           ],
         ),
-        onTap: () => _showCotisationDetails(cotisation, adherent),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
       ),
     );
   }
@@ -285,50 +708,11 @@ class _CotisationsScreenState extends ConsumerState<CotisationsScreen> {
     });
   }
 
-  void _showCotisationDetails(Cotisation cotisation, Adherent adherent) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Détails de la cotisation'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Adhérent: ${adherent.nomComplet}'),
-            Text('Téléphone: ${adherent.telephone}'),
-            SizedBox(height: 16),
-            Text('Année: ${cotisation.annee}'),
-            Text('Contribution annuelle: ${cotisation.montantFormate}'),
-            Text('Montant payé: ${cotisation.montantPayeFormate}'),
-            Text('Reste à payer: ${cotisation.resteFormate}'),
-            Text('Pourcentage payé: ${cotisation.pourcentagePaye.toStringAsFixed(1)}%'),
-            Text('Statut: ${cotisation.statut}'),
-            Text('Date de modification: ${DateFormat('dd MMM yyyy').format(cotisation.dateModification)}'),
-            if (cotisation.motifModification != null)
-              Text('Motif: ${cotisation.motifModification}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Fermer'),
-          ),
-          if (!cotisation.estSoldee)
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _showPaymentDialog(cotisation, adherent);
-              },
-              child: Text('Effectuer un paiement'),
-            ),
-        ],
-      ),
-    );
-  }
-
   void _showAddCotisationDialog() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => CotisationFormScreen(),
     ).then((_) {
       ref.read(cotisationProvider.notifier).loadCotisations();
@@ -336,8 +720,10 @@ class _CotisationsScreenState extends ConsumerState<CotisationsScreen> {
   }
 
   void _showEditCotisationDialog(Cotisation cotisation, Adherent adherent) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => CotisationFormScreen(
         cotisation: cotisation,
         adherent: adherent,
@@ -358,7 +744,8 @@ class CotisationFormScreen extends ConsumerStatefulWidget {
   ConsumerState<CotisationFormScreen> createState() => _CotisationFormScreenState();
 }
 
-class _CotisationFormScreenState extends ConsumerState<CotisationFormScreen> {
+class _CotisationFormScreenState extends ConsumerState<CotisationFormScreen>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _anneeController = TextEditingController();
   final _motifController = TextEditingController();
@@ -367,10 +754,32 @@ class _CotisationFormScreenState extends ConsumerState<CotisationFormScreen> {
   Adherent? _selectedAdherent;
   List<Adherent> _adherents = [];
   int _montantAnnuel = 0;
+  bool _isLoading = false;
+  
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  final ThemeService _themeService = ThemeService();
+  final Map<String, bool> _fieldFocused = {};
 
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    
+    _slideAnimation = Tween<Offset>(begin: Offset(0, 0.3), end: Offset.zero).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    );
+    
+    _animationController.forward();
+    
     _loadAdherents();
     
     if (widget.cotisation != null) {
@@ -408,156 +817,457 @@ class _CotisationFormScreenState extends ConsumerState<CotisationFormScreen> {
     _anneeController.dispose();
     _motifController.dispose();
     _montantController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.cotisation == null ? 'Nouvelle cotisation' : 'Modifier la cotisation'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Sélection de l'adhérent
-                if (widget.adherent == null) ...[
-                  DropdownButtonFormField<Adherent>(
-                    value: _selectedAdherent,
-                    decoration: InputDecoration(
-                      labelText: 'Adhérent *',
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                    items: _adherents.map((adherent) {
-                      return DropdownMenuItem<Adherent>(
-                        value: adherent,
-                        child: Text(adherent.nomComplet),
-                      );
-                    }).toList(),
-                    onChanged: (Adherent? value) {
-                      setState(() {
-                        _selectedAdherent = value;
-                        if (value != null) {
-                          _montantAnnuel = value.montantAnnuelContribution;
-                          _montantController.text = _montantAnnuel.toString();
-                        }
-                      });
-                    },
-                    validator: (value) => value == null ? 'Veuillez sélectionner un adhérent' : null,
-                  ),
-                  SizedBox(height: 16),
-                ] else ...[
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.person, color: Colors.grey[600]),
-                        SizedBox(width: 12),
-                        Text('Adhérent: ${widget.adherent!.nomComplet}'),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                ],
-                
-                // Champ année
-                TextFormField(
-                  controller: _anneeController,
-                  decoration: InputDecoration(
-                    labelText: 'Année *',
-                    prefixIcon: Icon(Icons.calendar_today),
-                  ),
-                  keyboardType: TextInputType.number,
-                  validator: (value) {
-                    if (value?.isEmpty == true) return 'Champ obligatoire';
-                    final annee = int.tryParse(value!);
-                    if (annee == null) return 'Année invalide';
-                    if (annee < 2000 || annee > DateTime.now().year + 1) {
-                      return 'Année non valide';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 16),
-                
-                // Champ montant annuel (modifiable)
-                TextFormField(
-                  controller: _montantController,
-                  decoration: InputDecoration(
-                    labelText: 'Montant annuel (FCFA) *',
-                    prefixIcon: Icon(Icons.money),
-                    hintText: 'Entrez le montant de la cotisation annuelle',
-                  ),
-                  keyboardType: TextInputType.number,
-                  validator: (value) {
-                    if (value?.isEmpty == true) return 'Champ obligatoire';
-                    final montant = int.tryParse(value!);
-                    if (montant == null) return 'Montant invalide';
-                    if (montant <= 0) return 'Le montant doit être positif';
-                    return null;
-                  },
-                  onChanged: (value) {
-                    final montant = int.tryParse(value);
-                    if (montant != null && montant > 0) {
-                      setState(() {
-                        _montantAnnuel = montant;
-                      });
-                    }
-                  },
-                ),
-                SizedBox(height: 16),
-                
-                // Champ motif (pour création et modification)
-                TextFormField(
-                  controller: _motifController,
-                  decoration: InputDecoration(
-                    labelText: widget.cotisation == null ? 'Motif de création' : 'Motif de modification',
-                    prefixIcon: Icon(Icons.edit_note),
-                    hintText: widget.cotisation == null 
-                        ? 'Entrez la raison de cette cotisation' 
-                        : 'Entrez la raison de la modification',
-                  ),
-                  maxLines: 3,
-                  validator: (value) {
-                    if (widget.cotisation == null && (value?.isEmpty == true || value?.trim() == '')) {
-                      return 'Le motif est obligatoire pour la création';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 16),
-              ],
-            ),
+    final isDarkMode = _themeService.isDarkMode;
+    
+    return Container(
+      width: double.infinity,
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
           ),
-        ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(AppStrings.annuler),
-        ),
-        ElevatedButton(
-          onPressed: _saveCotisation,
-          child: Text(widget.cotisation == null ? 'Enregistrer' : 'Modifier'),
-        ),
-      ],
+      child: AnimatedBuilder(
+        animation: _animationController,
+        builder: (context, child) {
+          return FadeTransition(
+            opacity: _fadeAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: Column(
+                children: [
+                  _buildDragHandle(),
+                  _buildHeader(isDarkMode),
+                  Expanded(
+                    child: _buildFormContent(isDarkMode),
+                  ),
+                  _buildActions(isDarkMode),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
-  void _saveCotisation() {
+  Widget _buildDragHandle() {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      width: 40,
+      height: 4,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade300,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+
+  Widget _buildHeader(bool isDarkMode) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              widget.cotisation == null ? Icons.money : Icons.edit,
+              color: AppColors.primary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.cotisation == null ? 'Nouvelle Cotisation' : 'Modifier la Cotisation',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  widget.cotisation == null 
+                      ? 'Enregistrez une nouvelle cotisation pour un adhérent'
+                      : 'Modifiez les informations de la cotisation',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormContent(bool isDarkMode) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            if (widget.adherent == null) ...[
+              SearchableAdherentDropdown(
+                label: 'Adhérent',
+                selectedAdherent: _selectedAdherent,
+                adherents: _adherents,
+                isRequired: true,
+                onChanged: (Adherent? value) {
+                  setState(() {
+                    _selectedAdherent = value;
+                    if (value != null) {
+                      _montantAnnuel = value.montantAnnuelContribution;
+                      _montantController.text = _montantAnnuel.toString();
+                    }
+                  });
+                },
+                validator: (value) => value == null ? 'Veuillez sélectionner un adhérent' : null,
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              _buildAdherentInfo(isDarkMode),
+              const SizedBox(height: 12),
+            ],
+            
+            _buildAnimatedField(
+              isDarkMode,
+              controller: _anneeController,
+              label: 'Année',
+              icon: Icons.calendar_today,
+              isRequired: true,
+              fieldKey: 'annee',
+              keyboardType: TextInputType.number,
+              validator: (value) {
+                if (value?.isEmpty == true) return 'Champ obligatoire';
+                final annee = int.tryParse(value!);
+                if (annee == null) return 'Année invalide';
+                if (annee < 2000 || annee > DateTime.now().year + 1) {
+                  return 'Année non valide';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            
+            _buildAnimatedField(
+              isDarkMode,
+              controller: _montantController,
+              label: 'Montant annuel (FCFA)',
+              icon: Icons.money,
+              isRequired: true,
+              fieldKey: 'montant',
+              keyboardType: TextInputType.number,
+              validator: (value) {
+                if (value?.isEmpty == true) return 'Champ obligatoire';
+                final montant = int.tryParse(value!);
+                if (montant == null) return 'Montant invalide';
+                if (montant <= 0) return 'Le montant doit être positif';
+                return null;
+              },
+              onChanged: (value) {
+                final montant = int.tryParse(value);
+                if (montant != null && montant > 0) {
+                  setState(() {
+                    _montantAnnuel = montant;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            
+            _buildAnimatedField(
+              isDarkMode,
+              controller: _motifController,
+              label: widget.cotisation == null ? 'Motif de création' : 'Motif de modification',
+              icon: Icons.edit_note,
+              isRequired: widget.cotisation == null,
+              fieldKey: 'motif',
+              maxLines: 3,
+              validator: (value) {
+                if (widget.cotisation == null && (value?.isEmpty == true || value?.trim() == '')) {
+                  return 'Le motif est obligatoire pour la création';
+                }
+                return null;
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdherentInfo(bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              Icons.person,
+              size: 18,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Adhérent',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                Text(
+                  widget.adherent!.nomComplet,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnimatedField(
+    bool isDarkMode, {
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required bool isRequired,
+    required String fieldKey,
+    TextInputType? keyboardType,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+    Function(String)? onChanged,
+  }) {
+    final isFocused = _fieldFocused[fieldKey] ?? false;
+    
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isFocused 
+              ? AppColors.primary 
+              : Colors.grey.shade300,
+          width: isFocused ? 2 : 1,
+        ),
+        boxShadow: isFocused
+            ? [
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(0.2),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.grey.shade200,
+                  blurRadius: 2,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+      ),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        maxLines: maxLines,
+        validator: validator,
+        onChanged: onChanged,
+        style: const TextStyle(
+          fontSize: 14,
+          color: Colors.black87,
+        ),
+        decoration: InputDecoration(
+          labelText: '$label${isRequired ? ' *' : ''}',
+          labelStyle: TextStyle(
+            color: isFocused 
+                ? AppColors.primary 
+                : Colors.grey.shade600,
+            fontSize: 12,
+          ),
+          prefixIcon: Container(
+            margin: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: isFocused 
+                  ? AppColors.primary.withOpacity(0.1)
+                  : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: isFocused 
+                  ? AppColors.primary 
+                  : Colors.grey.shade600,
+            ),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+        onTap: () => setState(() => _fieldFocused[fieldKey] = true),
+        onTapOutside: (_) => setState(() => _fieldFocused[fieldKey] = false),
+        onEditingComplete: () => setState(() => _fieldFocused[fieldKey] = false),
+      ),
+    );
+  }
+
+  Widget _buildActions(bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(
+            color: Colors.grey.shade200,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: Colors.grey.shade300,
+                  ),
+                ),
+              ),
+              child: Text(
+                AppStrings.annuler,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _saveCotisation,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 0,
+              ),
+              child: _isLoading
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('Enregistrement...', style: TextStyle(fontSize: 14)),
+                      ],
+                    )
+                  : Text(
+                      widget.cotisation == null ? 'Enregistrer' : 'Modifier',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _saveCotisation() async {
     if (_formKey.currentState?.validate() == true && _selectedAdherent != null) {
+      setState(() => _isLoading = true);
+      
       final adherentId = _selectedAdherent!.id;
       final annee = int.parse(_anneeController.text);
       final montantAnnuel = int.parse(_montantController.text);
       final motif = _motifController.text.trim();
+
+      await Future.delayed(const Duration(milliseconds: 500));
 
       if (widget.cotisation == null) {
         // Nouvelle cotisation
@@ -572,8 +1282,18 @@ class _CotisationFormScreenState extends ConsumerState<CotisationFormScreen> {
         ref.read(cotisationProvider.notifier).addCotisation(cotisation);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Cotisation créée avec succès! Vous pouvez maintenant enregistrer les paiements.'),
-            backgroundColor: Colors.green,
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Cotisation créée avec succès!'),
+              ],
+            ),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       } else {
@@ -590,13 +1310,24 @@ class _CotisationFormScreenState extends ConsumerState<CotisationFormScreen> {
         ref.read(cotisationProvider.notifier).updateCotisation(cotisation);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Cotisation modifiée avec succès!'),
-            backgroundColor: Colors.blue,
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Cotisation modifiée avec succès!'),
+              ],
+            ),
+            backgroundColor: AppColors.info,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
 
       Navigator.pop(context);
+      setState(() => _isLoading = false);
     }
   }
 }

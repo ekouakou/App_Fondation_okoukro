@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
+import '../services/theme_service.dart';
 import '../utils/constants.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -15,18 +16,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _notificationsEnabled = true;
   bool _darkModeEnabled = false;
   String _language = 'fr';
+  late ThemeService _themeService;
 
   @override
   void initState() {
     super.initState();
+    _themeService = ThemeService();
     _loadSettings();
   }
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    await _themeService.loadTheme();
     setState(() {
       _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
-      _darkModeEnabled = prefs.getBool('dark_mode_enabled') ?? false;
+      _darkModeEnabled = _themeService.isDarkMode;
       _language = prefs.getString('language') ?? 'fr';
     });
   }
@@ -34,7 +38,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('notifications_enabled', _notificationsEnabled);
-    await prefs.setBool('dark_mode_enabled', _darkModeEnabled);
     await prefs.setString('language', _language);
   }
 
@@ -245,11 +248,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             children: [
               SwitchListTile(
                 value: _darkModeEnabled,
-                onChanged: (value) {
+                onChanged: (value) async {
+                  await _themeService.setTheme(value);
                   setState(() {
                     _darkModeEnabled = value;
                   });
-                  _saveSettings();
                 },
                 title: Text('Mode sombre'),
                 subtitle: Text('Activer le thème sombre'),

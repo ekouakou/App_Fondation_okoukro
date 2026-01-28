@@ -33,6 +33,15 @@ class CotisationNotifier extends StateNotifier<AsyncValue<List<Cotisation>>> {
     }
   }
 
+  Future<void> deleteCotisation(String cotisationId) async {
+    try {
+      await FirebaseService.deleteCotisation(cotisationId);
+      await loadCotisations();
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+    }
+  }
+
   Future<Cotisation?> getCotisationByAdherentAnnee(String adherentId, int annee) async {
     try {
       return await FirebaseService.getCotisationByAdherentAnnee(adherentId, annee);

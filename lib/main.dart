@@ -16,9 +16,13 @@ import 'screens/settings_screen.dart';
 import 'screens/auth_screen.dart';
 import 'services/firebase_service.dart';
 import 'services/auth_service.dart';
-import 'utils/theme.dart';
+import 'services/theme_service.dart';
+import 'config/app_theme.dart';
 import 'utils/constants.dart';
 import 'firebase_options.dart';
+
+// Provider pour ThemeService
+final themeServiceProvider = ChangeNotifierProvider((ref) => ThemeService());
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,15 +56,22 @@ void main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeService = ref.watch(themeServiceProvider);
+    
+    // Charger le thème au démarrage
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      themeService.loadTheme();
+    });
+    
     return MaterialApp(
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: themeService.themeMode,
       home: Builder(
         builder: (context) {
           final authService = context.watch<AuthService>();
