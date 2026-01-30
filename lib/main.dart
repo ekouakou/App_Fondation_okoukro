@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/adherents_screen.dart';
 import 'screens/cotisations_screen.dart';
@@ -26,6 +28,9 @@ final themeServiceProvider = ChangeNotifierProvider((ref) => ThemeService());
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialiser le formatage des dates
+  await initializeDateFormatting('fr_FR', null);
 
   try {
     // Initialiser Firebase avec les options spécifiques à la plateforme
@@ -100,7 +105,7 @@ class _MainScreenState extends State<MainScreen> {
     DashboardScreen(),
     AdherentsScreen(),
     CotisationsScreen(),
-    PaiementsScreen(),
+    PaiementsWizardScreen(),
     ListePaiementsScreen(),
     BeneficesScreen(),
     RapportsScreen(),

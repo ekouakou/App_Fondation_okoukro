@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../providers/cotisation_provider.dart';
 import '../providers/adherent_provider.dart';
+import '../providers/paiement_provider.dart';
 import '../models/cotisation.dart';
 import '../models/adherent.dart';
+import '../models/paiement.dart';
 import '../utils/constants.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/empty_state_widget.dart';
@@ -704,7 +706,9 @@ class _CotisationsScreenState extends ConsumerState<CotisationsScreen> {
       context: context,
       builder: (context) => PaymentDialog(cotisation: cotisation, adherent: adherent),
     ).then((_) {
+      // Forcer le rechargement de tous les providers concernés
       ref.read(cotisationProvider.notifier).loadCotisations();
+      ref.read(paiementProvider.notifier).loadPaiements();
     });
   }
 
@@ -1453,6 +1457,21 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       final montant = int.parse(_montantController.text);
       final nouveauMontantPaye = widget.cotisation.montantPaye + montant;
       
+      // 1. Créer l'enregistrement de paiement
+      final paiement = Paiement(
+        adherentId: widget.adherent.id,
+        annee: widget.cotisation.annee,
+        montantVerse: montant,
+        datePaiement: DateTime.now(),
+        statut: StatutPaiement.complete,
+        methode: _convertMethodePaiement(_methodePaiement),
+        notes: _notesController.text.isNotEmpty ? _notesController.text : null,
+      );
+
+      // 2. Ajouter le paiement (notifie paiementProvider)
+      ref.read(paiementProvider.notifier).addPaiement(paiement);
+      
+      // 3. Mettre à jour la cotisation (notifie cotisationProvider)
       final cotisationMaj = widget.cotisation.copyWith(
         montantPaye: nouveauMontantPaye,
         dateModification: DateTime.now(),
@@ -1469,6 +1488,21 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       );
 
       Navigator.pop(context);
+    }
+  }
+
+  MethodePaiement _convertMethodePaiement(String methode) {
+    switch (methode) {
+      case 'Espèce':
+        return MethodePaiement.espece;
+      case 'Mobile Money':
+        return MethodePaiement.mobileMoney;
+      case 'Virement':
+        return MethodePaiement.virement;
+      case 'Chèque':
+        return MethodePaiement.cheque;
+      default:
+        return MethodePaiement.espece;
     }
   }
 }

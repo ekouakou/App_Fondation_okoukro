@@ -19,13 +19,57 @@ class AdherentsScreen extends ConsumerStatefulWidget {
   ConsumerState<AdherentsScreen> createState() => _AdherentsScreenState();
 }
 
-class _AdherentsScreenState extends ConsumerState<AdherentsScreen> {
+class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
+    with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  late AnimationController _fabAnimationController;
+  late AnimationController _listAnimationController;
+  late Animation<double> _fabScaleAnimation;
+  late Animation<Offset> _fabSlideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Animation pour le FloatingActionButton
+    _fabAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    _fabScaleAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fabAnimationController,
+      curve: Curves.elasticOut,
+    ));
+    
+    _fabSlideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1.5),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _fabAnimationController,
+      curve: Curves.easeOutBack,
+    ));
+    
+    // Animation pour la liste
+    _listAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
+    // Démarrer les animations
+    _fabAnimationController.forward();
+    _listAnimationController.forward();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _fabAnimationController.dispose();
+    _listAnimationController.dispose();
     super.dispose();
   }
 
@@ -34,58 +78,377 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen> {
     final adherentsAsync = ref.watch(adherentProvider);
 
     return Scaffold(
-      body: Column(
-        children: [
-          _buildSearchBar(),
-          Expanded(
-            child: adherentsAsync.when(
-              loading: () => LoadingWidget(),
-              error: (error, stack) => Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.error_outline, size: 64, color: Colors.red),
-                    SizedBox(height: 16),
-                    Text('Erreur: $error'),
-                    SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => ref.read(adherentProvider.notifier).loadAdherents(),
-                      child: Text('Réessayer'),
+      backgroundColor: AppColors.getPureBackground(ThemeService().isDarkMode),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildSearchBar(),
+            const SizedBox(height: 8),
+            Expanded(
+              child: adherentsAsync.when(
+                loading: () => const LoadingWidget(),
+                error: (error, stack) => Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: AppColors.error.toSurface(),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppColors.error.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.error_outline,
+                            size: 48,
+                            color: AppColors.error,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Erreur de chargement',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.getTextColor(ThemeService().isDarkMode),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          error.toString(),
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.getTextColor(ThemeService().isDarkMode, type: TextType.secondary),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: () => ref.read(adherentProvider.notifier).loadAdherents(),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Réessayer'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: AppColors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                data: (adherents) => _buildAdherentsList(adherents),
+              ),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: AnimatedBuilder(
+        animation: _fabAnimationController,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _fabScaleAnimation.value,
+            child: SlideTransition(
+              position: _fabSlideAnimation,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
+                child: FloatingActionButton.extended(
+                  onPressed: _showAddAdherentDialog,
+                  icon: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.add,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  label: const Text(
+                    'Ajouter',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  backgroundColor: AppColors.primary,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
               ),
-              data: (adherents) => _buildAdherentsList(adherents),
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddAdherentDialog,
-        child: Icon(Icons.add),
+          );
+        },
       ),
     );
   }
 
   Widget _buildSearchBar() {
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: 'Rechercher un adhérent...',
-          prefixIcon: Icon(Icons.search),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-            icon: Icon(Icons.clear),
-            onPressed: () {
-              _searchController.clear();
-              setState(() => _searchQuery = '');
-            },
-          )
-              : null,
-        ),
-        onChanged: (value) => setState(() => _searchQuery = value),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Column(
+        children: [
+          // Header avec titre et compteur
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Adhérents',
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.getTextColor(ThemeService().isDarkMode),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final adherentsAsync = ref.watch(adherentProvider);
+                        return adherentsAsync.when(
+                          data: (adherents) => Text(
+                            '${adherents.length} adhérent(s)',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: AppColors.getTextColor(ThemeService().isDarkMode, type: TextType.secondary),
+                            ),
+                          ),
+                          loading: () => const SizedBox(),
+                          error: (_, __) => const SizedBox(),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              // Bouton filtre
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.getSurfaceColor(ThemeService().isDarkMode),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.getBorderColor(ThemeService().isDarkMode),
+                  ),
+                ),
+                child: PopupMenuButton<String>(
+                  icon: Icon(
+                    Icons.more_vert,
+                    color: AppColors.getTextColor(ThemeService().isDarkMode),
+                  ),
+                  onSelected: (value) {
+                    if (value == 'import') {
+                      _showImportDialog();
+                    } else if (value == 'clear_all') {
+                      _showClearAllDialog();
+                    } else if (value == 'filter') {
+                      _showFilterDialog();
+                    }
+                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'import',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.upload_file,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Importer liste',
+                            style: TextStyle(
+                              color: AppColors.getTextColor(ThemeService().isDarkMode),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'clear_all',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_sweep,
+                            color: AppColors.error,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Tout vider',
+                            style: TextStyle(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'filter',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.tune,
+                            color: AppColors.getTextColor(ThemeService().isDarkMode),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Filtrer',
+                            style: TextStyle(
+                              color: AppColors.getTextColor(ThemeService().isDarkMode),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Barre de recherche améliorée
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              color: AppColors.getSurfaceColor(ThemeService().isDarkMode),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _searchQuery.isNotEmpty 
+                    ? AppColors.primary.withOpacity(0.5)
+                    : AppColors.getBorderColor(ThemeService().isDarkMode),
+                width: _searchQuery.isNotEmpty ? 2 : 1,
+              ),
+              boxShadow: _searchQuery.isNotEmpty ? [
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ] : null,
+            ),
+            child: TextField(
+              controller: _searchController,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.getTextColor(ThemeService().isDarkMode),
+              ),
+              decoration: InputDecoration(
+                hintText: 'Rechercher par nom, téléphone...',
+                hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.getTextColor(ThemeService().isDarkMode, type: TextType.tertiary),
+                ),
+                prefixIcon: Container(
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(
+                    Icons.search,
+                    color: _searchQuery.isNotEmpty 
+                        ? AppColors.primary 
+                        : AppColors.getTextColor(ThemeService().isDarkMode, type: TextType.secondary),
+                    size: 20,
+                  ),
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.clear,
+                            color: AppColors.getTextColor(ThemeService().isDarkMode, type: TextType.secondary),
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                          tooltip: 'Effacer',
+                        ),
+                      )
+                    : Container(
+                        width: 48,
+                        padding: const EdgeInsets.all(12),
+                        child: Icon(
+                          Icons.mic,
+                          color: AppColors.getTextColor(ThemeService().isDarkMode, type: TextType.tertiary),
+                          size: 20,
+                        ),
+                      ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+              ),
+              onChanged: (value) {
+                setState(() => _searchQuery = value);
+              },
+              onSubmitted: (value) {
+                // Optionnel: action quand l'utilisateur soumet la recherche
+              },
+            ),
+          ),
+          // Suggestions de recherche rapide (optionnel)
+          if (_searchQuery.isEmpty) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 32,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: 4,
+                itemBuilder: (context, index) {
+                  final suggestions = ['Actifs', 'Inactifs', 'Récents', 'Favoris'];
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(suggestions[index]),
+                      onSelected: (isSelected) {
+                        // Implémenter la logique de filtre rapide
+                      },
+                      backgroundColor: AppColors.getSurfaceColor(ThemeService().isDarkMode),
+                      selectedColor: AppColors.primarySurface,
+                      labelStyle: TextStyle(
+                        color: AppColors.getTextColor(ThemeService().isDarkMode, type: TextType.secondary),
+                        fontSize: 12,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: AppColors.getBorderColor(ThemeService().isDarkMode),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -112,122 +475,406 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(adherentProvider.notifier).loadAdherents(),
+      onRefresh: () async {
+        await ref.read(adherentProvider.notifier).loadAdherents();
+        // Réinitialiser l'animation de la liste
+        _listAnimationController.reset();
+        _listAnimationController.forward();
+      },
       child: ListView.builder(
         itemCount: filteredAdherents.length,
         itemBuilder: (context, index) {
           final adherent = filteredAdherents[index];
-          return _buildAdherentCard(adherent);
+          return AnimatedBuilder(
+            animation: _listAnimationController,
+            builder: (context, child) {
+              final animationDelay = (index * 100).clamp(0, 800);
+              final animationValue = (_listAnimationController.value * 1000 - animationDelay) / 1000;
+              
+              return SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0.3, 0),
+                  end: Offset.zero,
+                ).animate(CurvedAnimation(
+                  parent: _listAnimationController,
+                  curve: Interval(
+                    animationDelay / 1000,
+                    math.min(1.0, (animationDelay + 300) / 1000),
+                    curve: Curves.easeOutCubic,
+                  ),
+                )),
+                child: FadeTransition(
+                  opacity: Tween<double>(
+                    begin: 0.0,
+                    end: 1.0,
+                  ).animate(CurvedAnimation(
+                    parent: _listAnimationController,
+                    curve: Interval(
+                      animationDelay / 1000,
+                      math.min(1.0, (animationDelay + 300) / 1000),
+                      curve: Curves.easeOut,
+                    ),
+                  )),
+                  child: _buildAdherentCard(adherent),
+                ),
+              );
+            },
+          );
         },
       ),
     );
   }
 
   Widget _buildAdherentCard(Adherent adherent) {
-    return Card(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: adherent.estActif ? Colors.green : Colors.grey,
-          child: adherent.photoUrl.isNotEmpty
-              ? ClipOval(
-            child: Image.network(
-              adherent.photoUrl,
-              width: 40,
-              height: 40,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Icon(Icons.person, color: Colors.white);
-              },
-            ),
-          )
-              : Icon(Icons.person, color: Colors.white),
+    final isDarkMode = ThemeService().isDarkMode;
+    final isActive = adherent.estActif;
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.getSurfaceColor(isDarkMode),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isActive 
+              ? AppColors.primary.withOpacity(0.2)
+              : AppColors.getBorderColor(isDarkMode),
+          width: isActive ? 1.5 : 1,
         ),
-        title: Text(
-          adherent.nomComplet,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: adherent.estActif ? Colors.black87 : Colors.grey,
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode 
+                ? Colors.black.withOpacity(0.15)
+                : Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(adherent.telephone),
-            SizedBox(height: 4),
-            Text(
-              'Adhésion: ${DateFormat('dd MMM yyyy').format(adherent.dateAdhesion)}',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!adherent.estActif)
-              Chip(
-                label: Text('Inactif'),
-                backgroundColor: Colors.red.withOpacity(0.1),
-                labelStyle: TextStyle(color: Colors.red, fontSize: 12),
-              ),
-            PopupMenuButton<String>(
-              onSelected: (value) => _handleMenuAction(value, adherent),
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'view',
-                  child: Row(
-                    children: [
-                      Icon(Icons.visibility),
-                      SizedBox(width: 8),
-                      Text('Voir'),
-                    ],
-                  ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _viewAdherentDetails(adherent),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // Header avec avatar et informations principales
+                Row(
+                  children: [
+                    // Avatar amélioré
+                    Hero(
+                      tag: 'avatar_${adherent.id}',
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          gradient: isActive 
+                              ? AppColors.primaryGradient 
+                              : LinearGradient(
+                                  colors: [
+                                    AppColors.grey400,
+                                    AppColors.grey500,
+                                  ],
+                                ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (isActive ? AppColors.primary : AppColors.grey400).withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: adherent.photoUrl.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: Image.network(
+                                  adherent.photoUrl,
+                                  width: 56,
+                                  height: 56,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Icon(
+                                      Icons.person,
+                                      color: Colors.white,
+                                      size: 28,
+                                    );
+                                  },
+                                ),
+                              )
+                            : Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Informations principales
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Nom avec badge de statut
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  adherent.nomComplet,
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.getTextColor(isDarkMode),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Badge de statut
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isActive 
+                                      ? AppColors.success.withOpacity(0.1)
+                                      : AppColors.error.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: isActive 
+                                        ? AppColors.success.withOpacity(0.3)
+                                        : AppColors.error.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: isActive 
+                                            ? AppColors.success 
+                                            : AppColors.error,
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      isActive ? 'Actif' : 'Inactif',
+                                      style: TextStyle(
+                                        color: isActive 
+                                            ? AppColors.success 
+                                            : AppColors.error,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          // Informations secondaires
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.phone_outlined,
+                                size: 16,
+                                color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                adherent.telephone,
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.calendar_today_outlined,
+                                size: 16,
+                                color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Adhésion: ${DateFormat('dd MMM yyyy').format(adherent.dateAdhesion)}',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Menu actions
+                    PopupMenuButton<String>(
+                      onSelected: (value) => _handleMenuAction(value, adherent),
+                      icon: Icon(
+                        Icons.more_vert,
+                        color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 8,
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'view',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.visibility_outlined,
+                                color: AppColors.getTextColor(isDarkMode),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Voir les détails',
+                                style: TextStyle(
+                                  color: AppColors.getTextColor(isDarkMode),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.edit_outlined,
+                                color: AppColors.primary,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Modifier',
+                                style: TextStyle(
+                                  color: AppColors.getTextColor(isDarkMode),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'toggle',
+                          child: Row(
+                            children: [
+                              Icon(
+                                adherent.estActif ? Icons.block_outlined : Icons.check_circle_outline,
+                                color: adherent.estActif ? AppColors.warning : AppColors.success,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                adherent.estActif ? 'Désactiver' : 'Activer',
+                                style: TextStyle(
+                                  color: AppColors.getTextColor(isDarkMode),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'add_cotisation',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.payments_outlined,
+                                color: AppColors.success,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Ajouter cotisation',
+                                style: TextStyle(
+                                  color: AppColors.getTextColor(isDarkMode),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete_outline,
+                                color: AppColors.error,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Supprimer',
+                                style: TextStyle(
+                                  color: AppColors.error,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                PopupMenuItem(
-                  value: 'edit',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit),
-                      SizedBox(width: 8),
-                      Text('Modifier'),
-                    ],
+                // Actions rapides (optionnel)
+                if (!isActive) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.toSurface(),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: AppColors.error,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Cet adhérent est actuellement inactif',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _toggleAdherentStatus(adherent),
+                          child: Text(
+                            'Réactiver',
+                            style: TextStyle(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                PopupMenuItem(
-                  value: 'toggle',
-                  child: Row(
-                    children: [
-                      Icon(adherent.estActif ? Icons.block : Icons.check_circle),
-                      SizedBox(width: 8),
-                      Text(adherent.estActif ? 'Désactiver' : 'Activer'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'add_cotisation',
-                  child: Row(
-                    children: [
-                      Icon(Icons.money),
-                      SizedBox(width: 8),
-                      Text('Ajouter une cotisation'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Supprimer', style: TextStyle(color: Colors.red)),
-                    ],
-                  ),
-                ),
+                ],
               ],
             ),
-          ],
+          ),
         ),
-        onTap: () => _viewAdherentDetails(adherent),
       ),
     );
   }
@@ -331,6 +978,608 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen> {
         ],
       ),
     );
+  }
+
+  void _showClearAllDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.warning_amber,
+              color: AppColors.error,
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            Text('⚠️ ATTENTION - Suppression totale'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Cette action va SUPPRIMER DÉFINITIVEMENT:',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...[
+              '❌ Tous les adhérents',
+              '❌ Toutes les cotisations',
+              '❌ Tout l\'historique des paiements',
+              '❌ Tous les rapports générés',
+            ].map((item) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  Text(
+                    item,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            )),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.error.toSurface(),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.error.withOpacity(0.5),
+                  width: 2,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.dangerous,
+                        color: AppColors.error,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Cette action est IRRÉVERSIBLE!',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Aucune récupération ne sera possible.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Annuler',
+              style: TextStyle(
+                color: AppColors.getTextColor(ThemeService().isDarkMode),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _clearAllData();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: Text(
+              'Tout supprimer',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _clearAllData() async {
+    // Afficher un indicateur de chargement
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: AppColors.error),
+            const SizedBox(height: 16),
+            Text(
+              'Suppression en cours...',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.getTextColor(ThemeService().isDarkMode),
+              ),
+            ),
+            Text(
+              'Veuillez patienter',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.getTextColor(ThemeService().isDarkMode, type: TextType.secondary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Exécuter la suppression de toutes les données
+      await ref.read(adherentProvider.notifier).clearAllData();
+
+      // Fermer le dialogue de chargement
+      Navigator.pop(context);
+
+      // Afficher un message de succès
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.success,
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: AppColors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Toutes les données ont été supprimées avec succès!',
+                  style: TextStyle(
+                    color: AppColors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+
+      // Réinitialiser les animations de la liste
+      _listAnimationController.reset();
+      _listAnimationController.forward();
+
+    } catch (error) {
+      // Fermer le dialogue de chargement
+      Navigator.pop(context);
+
+      // Afficher un message d'erreur
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.error,
+          content: Row(
+            children: [
+              Icon(Icons.error, color: AppColors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Erreur lors de la suppression: $error',
+                  style: TextStyle(color: AppColors.white),
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+
+  void _showImportDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.upload_file,
+              color: AppColors.primary,
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            Text('Importer nouvelle liste'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Cette action va:',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            ...[
+              '❌ Supprimer tous les adhérents existants',
+              '✅ Importer la nouvelle liste de 39 adhérents',
+              '✅ Conserver les cotisations et paiements existants',
+            ].map((item) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                item,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            )),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warning.toSurface(),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.warning.withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber,
+                    color: AppColors.warning,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cette action est irréversible!',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.warning,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _importNewAdherents();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.white,
+            ),
+            child: Text('Importer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importNewAdherents() async {
+    // Afficher un indicateur de chargement
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: AppColors.primary),
+            const SizedBox(height: 16),
+            Text('Importation en cours...'),
+            Text(
+              'Veuillez patienter',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.getTextColor(ThemeService().isDarkMode, type: TextType.secondary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Créer la liste des nouveaux adhérents à partir de la liste complète
+      final newAdherents = [
+        Adherent(
+          nom: 'YAO',
+          prenom: 'KOUASSI ETIENNE',
+          telephone: '0504392510',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KOFFI',
+          prenom: 'YAO VALENTIN',
+          telephone: '0708372926',
+          montantAnnuelContribution: 60000,
+        ),
+        Adherent(
+          nom: 'KOUAKOU',
+          prenom: 'BROU DESIRE',
+          telephone: '0758256724',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KOUAME',
+          prenom: 'ADRIEN',
+          telephone: '0759329607',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KOUAKOU',
+          prenom: 'EUGENE',
+          telephone: '0708234209',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KANGAH',
+          prenom: 'KOUADIO RODRIGUE',
+          telephone: '0707394444',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KOFFI',
+          prenom: 'YAO ALBERT',
+          telephone: '0707058217',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'YAO',
+          prenom: 'KOUADIO PARFAIT',
+          telephone: '0748855948',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'YAO',
+          prenom: 'MARCELLIN',
+          telephone: '0101650936',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'YAO',
+          prenom: 'KABEGE',
+          telephone: '0709541039',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KOUAME',
+          prenom: 'KOUAKOU EDMOND',
+          telephone: '0707673232',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'YAO',
+          prenom: 'MATHURIN',
+          telephone: '0709983874',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KOUAKOU',
+          prenom: 'EDMOND',
+          telephone: '0748345289',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KOUAKOU',
+          prenom: 'N\'GUESSAN AROUINETTE',
+          telephone: '',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KOUADIO',
+          prenom: 'KOUAKI JONAS',
+          telephone: '0748804695',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KOUASSI',
+          prenom: 'KOUAKOU LUCIEN',
+          telephone: '0759695264',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KOUASSI',
+          prenom: 'KOUAME CAMILLE',
+          telephone: '0747967420',
+          montantAnnuelContribution: 40000,
+        ),
+        Adherent(
+          nom: 'KOUADIO',
+          prenom: 'KOUAKOU JEAN',
+          telephone: '0709877128',
+          montantAnnuelContribution: 30000,
+        ),
+        Adherent(
+          nom: 'YAO',
+          prenom: 'CHRISTIAN',
+          telephone: '0709220365',
+          montantAnnuelContribution: 30000,
+        ),
+        Adherent(
+          nom: 'KONAN',
+          prenom: 'PIERRE',
+          telephone: '',
+          montantAnnuelContribution: 30000,
+        ),
+        Adherent(
+          nom: 'BROU',
+          prenom: 'KOUASSI BENJAMIN',
+          telephone: '0748154196',
+          montantAnnuelContribution: 25000,
+        ),
+        Adherent(
+          nom: 'N\'GUESSAN',
+          prenom: 'ANNICK DIANE',
+          telephone: '0727553216',
+          montantAnnuelContribution: 25000,
+        ),
+        Adherent(
+          nom: 'SHAKA',
+          prenom: 'KOFFI ALEX',
+          telephone: '0748201010',
+          montantAnnuelContribution: 25000,
+        ),
+        Adherent(
+          nom: 'KOFFI',
+          prenom: 'KOUADIO CELESTIN',
+          telephone: '0709864401',
+          montantAnnuelContribution: 20000,
+        ),
+        Adherent(
+          nom: 'KOFFI',
+          prenom: 'AKISSI GEORGETTE',
+          telephone: '0747506425',
+          montantAnnuelContribution: 20000,
+        ),
+        Adherent(
+          nom: 'KONAN',
+          prenom: 'KOFFI FIRMIN',
+          telephone: '0747737216',
+          montantAnnuelContribution: 20000,
+        ),
+        Adherent(
+          nom: 'KOUASSI',
+          prenom: 'AMENAN JACQUELINE',
+          telephone: '0708868157',
+          montantAnnuelContribution: 20000,
+        ),
+        Adherent(
+          nom: 'KOUADIO',
+          prenom: 'ADRIEN',
+          telephone: '0787309414',
+          montantAnnuelContribution: 20000,
+        ),
+        Adherent(
+          nom: 'KOFFI',
+          prenom: 'YAO',
+          telephone: '0708804961',
+          montantAnnuelContribution: 10000,
+        ),
+        Adherent(
+          nom: 'KANGAH',
+          prenom: 'EULALIE',
+          telephone: '0759976778',
+          montantAnnuelContribution: 10000,
+        ),
+        Adherent(
+          nom: 'KOFFI',
+          prenom: 'N\'GOUAN CLARISSE',
+          telephone: '0749660300',
+          montantAnnuelContribution: 10000,
+        ),
+        Adherent(
+          nom: 'KOUAKOU',
+          prenom: 'KOUADIO ARTHUR',
+          telephone: '0757259824',
+          montantAnnuelContribution: 5000,
+        ),
+        Adherent(
+          nom: 'KOUAKOU',
+          prenom: 'YAO FREDERIC',
+          telephone: '0768556608',
+          montantAnnuelContribution: 5000,
+        ),
+        Adherent(
+          nom: 'KOUADIO',
+          prenom: 'YAO SERGE',
+          telephone: '0566469740',
+          montantAnnuelContribution: 5000,
+        ),
+        Adherent(
+          nom: 'KOUADIO',
+          prenom: 'BENJAMIN',
+          telephone: '',
+          montantAnnuelContribution: 50000,
+        ),
+        Adherent(
+          nom: 'KONAN',
+          prenom: 'AHOU JACQUELINE',
+          telephone: '',
+          montantAnnuelContribution: 50000,
+        ),
+      ];
+
+      // Exécuter l'importation
+      await ref.read(adherentProvider.notifier).resetWithNewAdherents(newAdherents);
+
+      // Fermer le dialogue de chargement
+      Navigator.pop(context);
+
+      // Afficher un message de succès
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.success,
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: AppColors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Succès! ${newAdherents.length} adhérents importés',
+                  style: TextStyle(color: AppColors.white),
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // Réinitialiser les animations de la liste
+      _listAnimationController.reset();
+      _listAnimationController.forward();
+
+    } catch (error) {
+      // Fermer le dialogue de chargement
+      Navigator.pop(context);
+
+      // Afficher un message d'erreur
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.error,
+          content: Row(
+            children: [
+              Icon(Icons.error, color: AppColors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Erreur lors de l\'importation: $error',
+                  style: TextStyle(color: AppColors.white),
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   void _showFilterDialog() {

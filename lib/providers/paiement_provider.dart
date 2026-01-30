@@ -95,6 +95,16 @@ class PaiementNotifier extends StateNotifier<AsyncValue<List<Paiement>>> {
     return state.value?.where((p) => p.statut == StatutPaiement.enAttente).toList() ?? [];
   }
 
+  Future<void> clearAllPaiements() async {
+    try {
+      state = const AsyncValue.loading();
+      await FirebaseService.clearAllPaiements();
+      await loadPaiements();
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+    }
+  }
+
   Future<void> markPaiementAsComplete(String paiementId) async {
     try {
       final paiements = state.value ?? [];

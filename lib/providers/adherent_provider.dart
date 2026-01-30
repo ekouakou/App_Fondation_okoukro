@@ -3,7 +3,10 @@ import '../models/adherent.dart';
 import '../services/firebase_service.dart';
 
 class AdherentNotifier extends StateNotifier<AsyncValue<List<Adherent>>> {
-  AdherentNotifier() : super(const AsyncValue.loading());
+  AdherentNotifier() : super(const AsyncValue.loading()) {
+    // Charger les adhérents automatiquement à la création
+    loadAdherents();
+  }
 
   Future<void> loadAdherents() async {
     try {
@@ -52,6 +55,37 @@ class AdherentNotifier extends StateNotifier<AsyncValue<List<Adherent>>> {
 
   List<Adherent> getAdherentsActifs() {
     return state.value?.where((a) => a.estActif).toList() ?? [];
+  }
+
+  Future<void> clearAllData() async {
+    try {
+      state = const AsyncValue.loading();
+      
+      // Vider toutes les collections dans l'ordre
+      await FirebaseService.clearAllFinancialData();
+      
+      // Recharger la liste
+      await loadAdherents();
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+    }
+  }
+
+  Future<void> resetWithNewAdherents(List<Adherent> newAdherents) async {
+    try {
+      state = const AsyncValue.loading();
+      
+      // Vider tous les adhérents existants
+      await FirebaseService.clearAllAdherents();
+      
+      // Insérer les nouveaux adhérents
+      await FirebaseService.insertMultipleAdherents(newAdherents);
+      
+      // Recharger la liste
+      await loadAdherents();
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+    }
   }
 
   List<Adherent> searchAdherents(String query) {

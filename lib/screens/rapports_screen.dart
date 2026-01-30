@@ -33,7 +33,16 @@ class _RapportsScreenState extends ConsumerState<RapportsScreen> {
   DateTime? _dateFinFiltre;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
-  bool _useAdvancedMode = false;
+  bool _useAdvancedMode = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Forcer le chargement des rapports au démarrage
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(rapportProvider.notifier).loadRapports();
+    });
+  }
 
   @override
   void dispose() {
@@ -86,18 +95,34 @@ class _RapportsScreenState extends ConsumerState<RapportsScreen> {
         _buildFiltersChips(),
         Expanded(
           child: rapportsAsync.when(
-            loading: () => LoadingWidget(),
+            loading: () => Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Chargement des rapports...', style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ),
+            ),
             error: (error, stack) => Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.error_outline, size: 64, color: Colors.red),
                   SizedBox(height: 16),
-                  Text('Erreur: $error'),
+                  Text('Erreur de chargement des rapports', style: Theme.of(context).textTheme.titleMedium),
+                  SizedBox(height: 8),
+                  Text('Détails: $error', style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
                   SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () => ref.read(rapportProvider.notifier).loadRapports(),
                     child: Text('Réessayer'),
+                  ),
+                  SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _showGenerateRapportDialog,
+                    child: Text('Générer un nouveau rapport'),
                   ),
                 ],
               ),
@@ -242,8 +267,10 @@ class _RapportsScreenState extends ConsumerState<RapportsScreen> {
     if (rapportsFiltres.isEmpty) {
       return EmptyStateWidget(
         icon: Icons.assessment,
-        title: 'Aucun rapport',
-        subtitle: 'Aucun rapport ne correspond à vos critères',
+        title: 'Aucun rapport trouvé',
+        subtitle: _searchQuery.isNotEmpty || _typeFiltre != null || _adherentFiltre != null
+            ? 'Aucun rapport ne correspond à vos critères de recherche'
+            : 'Commencez par générer votre premier rapport',
         action: FloatingActionButton(
           onPressed: _showGenerateRapportDialog,
           child: Icon(Icons.add_chart),
@@ -752,26 +779,658 @@ class _RapportsScreenState extends ConsumerState<RapportsScreen> {
   }
 
   Widget _buildCotisationsRapport(List<Cotisation> cotisations, List<Adherent> adherents) {
-    return Center(
-      child: Text('Rapport des cotisations - À implémenter'),
+    // Filtrer les cotisations pour l'année sélectionnée
+    final cotisationsAnnee = cotisations.where((c) => c.annee == anneeSelectionnee).toList();
+    
+    // Calculer les statistiques
+    final totalCotisations = cotisationsAnnee.fold<double>(0, (sum, c) => sum + c.montantPaye);
+    final totalAttendu = cotisationsAnnee.fold<double>(0, (sum, c) => sum + c.montantAnnuel);
+    final totalRestant = cotisationsAnnee.fold<double>(0, (sum, c) => sum + c.resteAPayer);
+    final cotisationsSoldees = cotisationsAnnee.where((c) => c.estSoldee).length;
+    final tauxRecouvrement = totalAttendu > 0 ? (totalCotisations / totalAttendu * 100) : 0.0;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Cartes de statistiques
+          GridView.count(
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 1.5,
+            children: [
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.receipt_long, size: 32, color: Colors.blue),
+                      SizedBox(height: 8),
+                      Text('${cotisationsAnnee.length}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('Cotisations $anneeSelectionnee', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, size: 32, color: Colors.green),
+                      SizedBox(height: 8),
+                      Text('$cotisationsSoldees', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('Cotisations soldées', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.attach_money, size: 32, color: Colors.orange),
+                      SizedBox(height: 8),
+                      Text('${NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(totalCotisations)}', 
+                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Montant collecté', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.trending_up, size: 32, color: Colors.purple),
+                      SizedBox(height: 8),
+                      Text('${tauxRecouvrement.toStringAsFixed(1)}%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('Taux recouvrement', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          SizedBox(height: 24),
+          
+          // Résumé détaillé
+          Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Résumé financier $anneeSelectionnee', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 16),
+                  _buildResumeRow('Total attendu', NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(totalAttendu)),
+                  _buildResumeRow('Montant collecté', NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(totalCotisations), isHighlight: true),
+                  _buildResumeRow('Reste à collecter', NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(totalRestant)),
+                  _buildResumeRow('Taux de recouvrement', '${tauxRecouvrement.toStringAsFixed(1)}%', isHighlight: true),
+                ],
+              ),
+            ),
+          ),
+          
+          SizedBox(height: 24),
+          
+          // Liste des cotisations détaillées
+          Text('Détail des cotisations', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          SizedBox(height: 16),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            itemCount: cotisationsAnnee.length,
+            itemBuilder: (context, index) {
+              final cotisation = cotisationsAnnee[index];
+              final adherent = adherents.firstWhere(
+                (a) => a.id == cotisation.adherentId,
+                orElse: () => Adherent(nom: 'Inconnu', prenom: '', telephone: ''),
+              );
+              
+              return Card(
+                margin: EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    child: Icon(Icons.person, color: Colors.white),
+                    backgroundColor: cotisation.estSoldee ? Colors.green : Colors.orange,
+                  ),
+                  title: Text(adherent.nomComplet),
+                  subtitle: Text('Année ${cotisation.annee}'),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('${NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(cotisation.montantPaye)}', 
+                           style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text('${cotisation.pourcentagePaye.toStringAsFixed(1)}%', 
+                           style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildPaiementsRapport(List<Paiement> paiements, List<Adherent> adherents) {
-    return Center(
-      child: Text('Rapport des paiements - À implémenter'),
+    // Filtrer les paiements pour l'année sélectionnée
+    final paiementsAnnee = paiements.where((p) => p.datePaiement.year == anneeSelectionnee).toList();
+    
+    // Calculer les statistiques
+    final totalPaiements = paiementsAnnee.fold<double>(0, (sum, p) => sum + p.montantVerse);
+    final nombrePaiements = paiementsAnnee.length;
+    final montantMoyen = nombrePaiements > 0 ? totalPaiements / nombrePaiements : 0.0;
+    
+    // Grouper par mois
+    final Map<int, double> paiementsParMois = {};
+    for (var paiement in paiementsAnnee) {
+      final mois = paiement.datePaiement.month;
+      paiementsParMois[mois] = (paiementsParMois[mois] ?? 0) + paiement.montantVerse;
+    }
+    
+    // Grouper par adhérent
+    final Map<String, double> paiementsParAdherent = {};
+    for (var paiement in paiementsAnnee) {
+      paiementsParAdherent[paiement.adherentId] = (paiementsParAdherent[paiement.adherentId] ?? 0) + paiement.montantVerse;
+    }
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Cartes de statistiques
+          GridView.count(
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 1.5,
+            children: [
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.payment, size: 32, color: Colors.green),
+                      SizedBox(height: 8),
+                      Text('$nombrePaiements', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('Paiements $anneeSelectionnee', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.account_balance_wallet, size: 32, color: Colors.blue),
+                      SizedBox(height: 8),
+                      Text('${NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(totalPaiements)}', 
+                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Total collecté', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.calculate, size: 32, color: Colors.orange),
+                      SizedBox(height: 8),
+                      Text('${NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(montantMoyen)}', 
+                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Moyenne/paiement', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people, size: 32, color: Colors.purple),
+                      SizedBox(height: 8),
+                      Text('${paiementsParAdherent.keys.length}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('Adhérents actifs', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          SizedBox(height: 24),
+          
+          // Paiements par mois
+          Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Paiements par mois', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 16),
+                  ...List.generate(12, (index) {
+                    final mois = index + 1;
+                    final montant = paiementsParMois[mois] ?? 0.0;
+                    final nomsMois = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+                    
+                    return _buildResumeRow(
+                      nomsMois[index],
+                      NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(montant),
+                      isHighlight: montant > 0,
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          
+          SizedBox(height: 24),
+          
+          // Top adhérents
+          Text('Top adhérents par montant', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          SizedBox(height: 16),
+          ...(() {
+            final sortedEntries = paiementsParAdherent.entries.toList();
+            sortedEntries.sort((a, b) => b.value.compareTo(a.value));
+            
+            return sortedEntries.take(10).map((entry) {
+              final adherent = adherents.firstWhere(
+                (a) => a.id == entry.key,
+                orElse: () => Adherent(nom: 'Inconnu', prenom: '', telephone: ''),
+              );
+              
+              return Card(
+                margin: EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    child: Icon(Icons.person, color: Colors.white),
+                    backgroundColor: Colors.blue,
+                  ),
+                  title: Text(adherent.nomComplet),
+                  trailing: Text(
+                    NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(entry.value),
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              );
+            }).toList();
+          })(),
+        ],
+      ),
     );
   }
 
   Widget _buildBeneficesRapport(List<Benefice> benefices, List<Adherent> adherents) {
-    return Center(
-      child: Text('Rapport des bénéfices - À implémenter'),
+    // Filtrer les bénéfices pour l'année sélectionnée
+    final beneficesAnnee = benefices.where((b) => b.annee == anneeSelectionnee).toList();
+    
+    // Calculer les statistiques
+    final totalBenefices = beneficesAnnee.fold<double>(0, (sum, b) => sum + b.montantTotal);
+    final nombreBenefices = beneficesAnnee.length;
+    final beneficesDistribues = beneficesAnnee.where((b) => b.estDistribue).length;
+    final beneficesNonDistribues = nombreBenefices - beneficesDistribues;
+    final montantMoyen = nombreBenefices > 0 ? totalBenefices / nombreBenefices : 0.0;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Cartes de statistiques
+          GridView.count(
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 1.5,
+            children: [
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.card_giftcard, size: 32, color: Colors.green),
+                      SizedBox(height: 8),
+                      Text('$nombreBenefices', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('Bénéfices $anneeSelectionnee', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.attach_money, size: 32, color: Colors.blue),
+                      SizedBox(height: 8),
+                      Text('${NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(totalBenefices)}', 
+                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Total bénéfices', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, size: 32, color: Colors.orange),
+                      SizedBox(height: 8),
+                      Text('$beneficesDistribues', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('Bénéfices distribués', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.pending, size: 32, color: Colors.red),
+                      SizedBox(height: 8),
+                      Text('$beneficesNonDistribues', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('En attente', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          SizedBox(height: 24),
+          
+          // Résumé détaillé
+          Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Résumé des bénéfices $anneeSelectionnee', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 16),
+                  _buildResumeRow('Nombre total de bénéfices', '$nombreBenefices'),
+                  _buildResumeRow('Montant total', NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(totalBenefices), isHighlight: true),
+                  _buildResumeRow('Moyenne par bénéfice', NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(montantMoyen)),
+                  _buildResumeRow('Bénéfices distribués', '$beneficesDistribues / $nombreBenefices'),
+                  _buildResumeRow('Taux de distribution', nombreBenefices > 0 ? '${(beneficesDistribues / nombreBenefices * 100).toStringAsFixed(1)}%' : '0%'),
+                ],
+              ),
+            ),
+          ),
+          
+          SizedBox(height: 24),
+          
+          // Liste des bénéfices détaillés
+          Text('Détail des bénéfices', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          SizedBox(height: 16),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            itemCount: beneficesAnnee.length,
+            itemBuilder: (context, index) {
+              final benefice = beneficesAnnee[index];
+              
+              return Card(
+                margin: EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    child: Icon(Icons.card_giftcard, color: Colors.white),
+                    backgroundColor: benefice.estDistribue ? Colors.green : Colors.orange,
+                  ),
+                  title: Text('Bénéfice ${benefice.annee}'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (benefice.description.isNotEmpty) Text(benefice.description),
+                      Text('Distribution: ${DateFormat('dd MMM yyyy').format(benefice.dateDistribution)}'),
+                    ],
+                  ),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('${NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(benefice.montantTotal)}', 
+                           style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                        benefice.estDistribue ? 'Distribué' : 'En attente',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: benefice.estDistribue ? Colors.green : Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildAdherentsRapport(List<Adherent> adherents) {
-    return Center(
-      child: Text('Rapport des adhérents - À implémenter'),
+    // Calculer les statistiques
+    final totalAdherents = adherents.length;
+    final adherentsActifs = adherents.where((a) => a.estActif).length;
+    final adherentsInactifs = totalAdherents - adherentsActifs;
+    
+    // Calculer les statistiques par année d'adhésion
+    final Map<int, int> adherentsParAnnee = {};
+    for (var adherent in adherents) {
+      final annee = adherent.dateAdhesion.year;
+      adherentsParAnnee[annee] = (adherentsParAnnee[annee] ?? 0) + 1;
+    }
+    
+    // Calculer la contribution totale attendue
+    final contributionTotale = adherents.fold<double>(0, (sum, a) => sum + a.montantAnnuelContribution);
+    final contributionMoyenne = totalAdherents > 0 ? contributionTotale / totalAdherents : 0.0;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Cartes de statistiques
+          GridView.count(
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 1.5,
+            children: [
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people, size: 32, color: Colors.blue),
+                      SizedBox(height: 8),
+                      Text('$totalAdherents', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('Total adhérents', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, size: 32, color: Colors.green),
+                      SizedBox(height: 8),
+                      Text('$adherentsActifs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('Adhérents actifs', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.money, size: 32, color: Colors.orange),
+                      SizedBox(height: 8),
+                      Text('${NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(contributionTotale)}', 
+                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Contributions annuelles', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.calculate, size: 32, color: Colors.purple),
+                      SizedBox(height: 8),
+                      Text('${NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(contributionMoyenne)}', 
+                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Contribution moyenne', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          SizedBox(height: 24),
+          
+          // Résumé détaillé
+          Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Résumé des adhérents', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 16),
+                  _buildResumeRow('Total adhérents', '$totalAdherents'),
+                  _buildResumeRow('Adhérents actifs', '$adherentsActifs', isHighlight: true),
+                  _buildResumeRow('Adhérents inactifs', '$adherentsInactifs'),
+                  _buildResumeRow('Taux d\'activité', totalAdherents > 0 ? '${(adherentsActifs / totalAdherents * 100).toStringAsFixed(1)}%' : '0%'),
+                  _buildResumeRow('Contribution totale', NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(contributionTotale)),
+                ],
+              ),
+            ),
+          ),
+          
+          SizedBox(height: 24),
+          
+          // Adhérents par année d'adhésion
+          Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Adhérents par année d\'adhésion', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 16),
+                  ...(() {
+                    final entries = adherentsParAnnee.entries.toList();
+                    entries.sort((a, b) => b.key.compareTo(a.key));
+                    return entries.map((entry) => _buildResumeRow(
+                      'Année ${entry.key}',
+                      '${entry.value} adhérent${entry.value > 1 ? 's' : ''}',
+                      isHighlight: entry.key == DateTime.now().year,
+                    )).toList();
+                  })(),
+                ],
+              ),
+            ),
+          ),
+          
+          SizedBox(height: 24),
+          
+          // Liste des adhérents détaillée
+          Text('Liste des adhérents', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          SizedBox(height: 16),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            itemCount: adherents.length,
+            itemBuilder: (context, index) {
+              final adherent = adherents[index];
+              
+              return Card(
+                margin: EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    child: Icon(Icons.person, color: Colors.white),
+                    backgroundColor: adherent.estActif ? Colors.green : Colors.grey,
+                  ),
+                  title: Text(adherent.nomComplet),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Téléphone: ${adherent.telephone}'),
+                      Text('Adhésion: ${DateFormat('dd MMM yyyy').format(adherent.dateAdhesion)}'),
+                      if (adherent.email.isNotEmpty) Text('Email: ${adherent.email}'),
+                    ],
+                  ),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('${NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(adherent.montantAnnuelContribution)}', 
+                           style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                        adherent.estActif ? 'Actif' : 'Inactif',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: adherent.estActif ? Colors.green : Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 

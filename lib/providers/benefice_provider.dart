@@ -6,7 +6,10 @@ import 'adherent_provider.dart';
 import 'cotisation_provider.dart';
 
 class BeneficeNotifier extends StateNotifier<AsyncValue<List<Benefice>>> {
-  BeneficeNotifier() : super(const AsyncValue.loading());
+  BeneficeNotifier() : super(const AsyncValue.loading()) {
+    // Charger les bénéfices automatiquement à la création
+    loadBenefices();
+  }
 
   Future<void> loadBenefices() async {
     try {

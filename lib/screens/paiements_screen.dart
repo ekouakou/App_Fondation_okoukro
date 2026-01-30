@@ -1,31 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../providers/adherent_provider.dart';
 import '../providers/cotisation_provider.dart';
 import '../providers/paiement_provider.dart';
 import '../models/adherent.dart';
 import '../models/cotisation.dart';
 import '../models/paiement.dart';
-import 'liste_paiements_screen.dart';
+import '../config/app_colors.dart';
+import '../widgets/searchable_adherent_dropdown.dart';
 
-class PaiementsScreen extends ConsumerStatefulWidget {
+class PaiementsWizardScreen extends ConsumerStatefulWidget {
   @override
-  ConsumerState<PaiementsScreen> createState() => _PaiementsScreenState();
+  ConsumerState<PaiementsWizardScreen> createState() => _PaiementsWizardScreenState();
 }
 
-class _PaiementsScreenState extends ConsumerState<PaiementsScreen> {
-  String? _selectedAdherentId;  // Changed: Store ID instead of object
-  String? _selectedCotisationId;  // Changed: Store ID instead of object
+class _PaiementsWizardScreenState extends ConsumerState<PaiementsWizardScreen> with TickerProviderStateMixin {
+  int _currentStep = 0;
+  Adherent? _selectedAdherent;
+  String? _selectedCotisationId;
   List<Adherent> _adherents = [];
   List<Cotisation> _cotisations = [];
+  
+  // Controllers pour l'étape de paiement
+  final _formKey = GlobalKey<FormState>();
+  final _montantController = TextEditingController();
+  final _notesController = TextEditingController();
+  String _methodePaiement = 'Espece';
+  DateTime _datePaiement = DateTime.now();
 
-  // Helper getters to retrieve objects by ID
-  Adherent? get _selectedAdherent =>
-      _selectedAdherentId == null ? null : _adherents.firstWhere(
-            (a) => a.id == _selectedAdherentId,
-        orElse: () => _adherents.first,
-      );
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
 
   Cotisation? get _selectedCotisation =>
       _selectedCotisationId == null ? null : _cotisations.firstWhere(
@@ -37,18 +42,53 @@ class _PaiementsScreenState extends ConsumerState<PaiementsScreen> {
   void initState() {
     super.initState();
     _loadData();
+    
+    _animationController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 500),
+    );
+    
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    
+    _slideAnimation = Tween<Offset>(
+      begin: Offset(0.3, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic));
+    
+    _animationController.forward();
+  }
+
+  // Ajouter une méthode pour forcer le rafraîchissement complet quand l'écran redevient actif
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Recharger les données chaque fois que l'écran redevient visible
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _montantController.dispose();
+    _notesController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
+    // Forcer le rechargement complet depuis Firestore pour éviter les données en cache
     await ref.read(adherentProvider.notifier).loadAdherents();
     await ref.read(cotisationProvider.notifier).loadCotisations();
+    await ref.read(paiementProvider.notifier).loadPaiements();
 
     final adherentsAsync = ref.read(adherentProvider);
     final cotisationsAsync = ref.read(cotisationProvider);
 
     if (adherentsAsync.hasValue && cotisationsAsync.hasValue) {
       setState(() {
-        // Filtrer les adhérents pour éviter les doublons en utilisant une Map
         final uniqueAdherents = <String, Adherent>{};
         for (final adherent in adherentsAsync.value!) {
           if (adherent.id.isNotEmpty) {
@@ -56,15 +96,11 @@ class _PaiementsScreenState extends ConsumerState<PaiementsScreen> {
           }
         }
         _adherents = uniqueAdherents.values.toList();
-
-        // Trier par nom pour plus de cohérence
         _adherents.sort((a, b) => a.nomComplet.compareTo(b.nomComplet));
-
         _cotisations = cotisationsAsync.value!;
 
-        // Réinitialiser la sélection si elle n'existe plus
-        if (_selectedAdherentId != null && !_adherents.any((a) => a.id == _selectedAdherentId)) {
-          _selectedAdherentId = null;
+        if (_selectedAdherent != null && !_adherents.any((a) => a.id == _selectedAdherent!.id)) {
+          _selectedAdherent = null;
           _selectedCotisationId = null;
         }
         if (_selectedCotisationId != null && !_cotisations.any((c) => c.id == _selectedCotisationId)) {
@@ -74,118 +110,553 @@ class _PaiementsScreenState extends ConsumerState<PaiementsScreen> {
     }
   }
 
+  void _nextStep() {
+    if (_currentStep < 2) {
+      _animationController.reset();
+      setState(() {
+        _currentStep++;
+      });
+      _animationController.forward();
+    }
+  }
+
+  void _previousStep() {
+    if (_currentStep > 0) {
+      _animationController.reset();
+      setState(() {
+        _currentStep--;
+      });
+      _animationController.forward();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: Text(
-          'Nouveau Paiement',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: Theme.of(context).primaryColor,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.history, color: Colors.white),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ListePaiementsScreen()),
-              );
-            },
-            tooltip: 'Voir l\'historique des paiements',
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16),
+      backgroundColor: AppColors.backgroundLight,
+      body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(),
-            SizedBox(height: 24),
-            _buildAdherentCard(),
-            if (_selectedAdherent != null) ...[
-              SizedBox(height: 16),
-              _buildCotisationCard(),
-              if (_selectedCotisation != null) ...[
-                SizedBox(height: 16),
-                _buildPaymentCard(),
-                SizedBox(height: 24),
-                _buildPayButton(),
-              ],
-            ],
+            _buildStepIndicator(),
+            Expanded(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: SlideTransition(
+                  position: _slideAnimation,
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: _buildCurrentStep(),
+                  ),
+                ),
+              ),
+            ),
+            _buildNavigationButtons(),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'paiement_history_fab',
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => ListePaiementsScreen()),
-          );
-        },
-        icon: Icon(Icons.history),
-        label: Text('Historique'),
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
       ),
     );
   }
 
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.all(20),
+      margin: EdgeInsets.all(12),
+      padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: AppColors.primaryGradient,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
+            color: AppColors.primary.withOpacity(0.2),
+            blurRadius: 8,
             offset: Offset(0, 2),
           ),
         ],
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.payment,
-            color: Theme.of(context).primaryColor,
-            size: 32,
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.payment_rounded,
+              color: AppColors.white,
+              size: 20,
+            ),
           ),
-          SizedBox(width: 16),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Enregistrer un paiement',
+                  'Nouveau Paiement',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.white,
                   ),
                 ),
-                SizedBox(height: 4),
+                SizedBox(height: 2),
                 Text(
-                  'Selectionnez un adherent et sa cotisation',
+                  'Processus guidé en 3 étapes',
                   style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
+                    color: AppColors.white.withOpacity(0.9),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepIndicator() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          _buildStepDot(0, 'Adhérent'),
+          Expanded(child: _buildStepLine(0)),
+          _buildStepDot(1, 'Cotisation'),
+          Expanded(child: _buildStepLine(1)),
+          _buildStepDot(2, 'Paiement'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepDot(int step, String label) {
+    final isActive = step == _currentStep;
+    final isCompleted = step < _currentStep;
+    
+    return Column(
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: isActive 
+                ? AppColors.primary 
+                : isCompleted 
+                    ? AppColors.success 
+                    : AppColors.grey300,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isActive ? AppColors.primary : AppColors.grey300,
+              width: 2,
+            ),
+          ),
+          child: Center(
+            child: isCompleted
+                ? Icon(Icons.check, color: Colors.white, size: 14)
+                : Text(
+                    '${step + 1}',
+                    style: TextStyle(
+                      color: isActive ? Colors.white : AppColors.grey600,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        ),
+        SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: isActive ? AppColors.primary : AppColors.grey600,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepLine(int step) {
+    final isActive = step < _currentStep;
+    return Container(
+      height: 2,
+      margin: EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: isActive ? AppColors.success : AppColors.grey300,
+        borderRadius: BorderRadius.circular(1),
+      ),
+    );
+  }
+
+  Widget _buildCurrentStep() {
+    switch (_currentStep) {
+      case 0:
+        return _buildAdherentStep();
+      case 1:
+        return _buildCotisationStep();
+      case 2:
+        return _buildPaymentStep();
+      default:
+        return Container();
+    }
+  }
+
+  Widget _buildAdherentStep() {
+    return _buildAdherentCard();
+  }
+
+  Widget _buildCotisationStep() {
+    final adherentCotisations = _cotisations
+        .where((c) => c.adherentId == _selectedAdherent!.id)
+        .toList()
+      ..sort((a, b) => b.annee.compareTo(a.annee));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Choisissez une cotisation',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimaryLight,
+          ),
+        ),
+        SizedBox(height: 12),
+        if (adherentCotisations.isEmpty)
+          Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.warningSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.warning),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.info_outline, color: AppColors.warning, size: 32),
+                SizedBox(height: 8),
+                Text(
+                  'Aucune cotisation',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.warning,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ...adherentCotisations.map((cotisation) {
+              final isSelected = _selectedCotisationId == cotisation.id;
+              final estSoldee = cotisation.estSoldee;
+              final estPartiel = cotisation.montantPaye > 0 && cotisation.montantPaye < cotisation.montantAnnuel;
+              final canSelect = !estSoldee; // On ne peut sélectionner que les cotisations non soldées
+              
+              return Container(
+                margin: EdgeInsets.only(bottom: 12),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: canSelect ? () {
+                      setState(() {
+                        _selectedCotisationId = cotisation.id;
+                      });
+                    } : null, // Désactivé si soldée
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: isSelected && canSelect ? AppColors.primary : AppColors.borderLight,
+                          width: isSelected && canSelect ? 2 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        color: estSoldee 
+                          ? Colors.grey.shade100 // Grisé si soldée
+                          : isSelected 
+                            ? AppColors.primarySurface 
+                            : Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          'Année ${cotisation.annee}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 16,
+                                            color: estSoldee 
+                                              ? Colors.grey.shade500 
+                                              : AppColors.textPrimaryLight,
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        if (estSoldee)
+                                          Container(
+                                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade400,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              'Soldée',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        if (estPartiel)
+                                          Container(
+                                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.warning,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              'Partiel',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Montant total',
+                                              style: TextStyle(
+                                                color: estSoldee 
+                                                  ? Colors.grey.shade400 
+                                                  : AppColors.textSecondaryLight,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            Text(
+                                              cotisation.montantFormate,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 14,
+                                                color: estSoldee 
+                                                  ? Colors.grey.shade500 
+                                                  : AppColors.textPrimaryLight,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        SizedBox(width: 24),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Déjà payé',
+                                              style: TextStyle(
+                                                color: estSoldee 
+                                                  ? Colors.grey.shade400 
+                                                  : AppColors.textSecondaryLight,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            Text(
+                                              cotisation.montantPayeFormate,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 14,
+                                                color: estSoldee 
+                                                  ? Colors.grey.shade500 
+                                                  : AppColors.success,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    if (!estSoldee) ...[
+                                      SizedBox(height: 8),
+                                      Container(
+                                        padding: EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.error.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.warning_amber, color: AppColors.error, size: 16),
+                                            SizedBox(width: 6),
+                                            Text(
+                                              'Reste à payer: ${cotisation.resteFormate}',
+                                              style: TextStyle(
+                                                color: AppColors.error,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    if (estSoldee) ...[
+                                      SizedBox(height: 8),
+                                      Container(
+                                        padding: EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade200,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.check_circle, color: Colors.grey.shade600, size: 16),
+                                            SizedBox(width: 6),
+                                            Text(
+                                              'Cotisation entièrement payée',
+                                              style: TextStyle(
+                                                color: Colors.grey.shade600,
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                estSoldee 
+                                  ? Icons.check_circle 
+                                  : isSelected 
+                                    ? Icons.check_circle 
+                                    : Icons.circle_outlined,
+                                color: estSoldee 
+                                  ? Colors.grey.shade400 
+                                  : isSelected 
+                                    ? AppColors.primary 
+                                    : AppColors.grey400,
+                                size: 24,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+      ],
+    );
+  }
+
+  Widget _buildPaymentStep() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Récapitulatif du paiement',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimaryLight,
+            ),
+          ),
+          SizedBox(height: 12),
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.grey50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: [
+                _buildSummaryRow('Adhérent', _selectedAdherent!.nomComplet),
+                _buildSummaryRow('Année', '${_selectedCotisation!.annee}'),
+                _buildSummaryRow('Montant total', _selectedCotisation!.montantFormate),
+                _buildSummaryRow('Déjà payé', _selectedCotisation!.montantPayeFormate),
+                Divider(height: 16),
+                _buildSummaryRow(
+                  'Reste à payer',
+                  _selectedCotisation!.resteFormate,
+                  valueColor: AppColors.error,
+                  valueBold: true,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Détails du paiement',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimaryLight,
+            ),
+          ),
+          SizedBox(height: 8),
+          TextFormField(
+            controller: _montantController,
+            decoration: InputDecoration(
+              labelText: 'Montant à payer',
+              hintText: 'Maximum: ${_selectedCotisation!.resteFormate}',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            keyboardType: TextInputType.number,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Veuillez entrer un montant';
+              }
+              final montant = int.tryParse(value);
+              if (montant == null || montant <= 0) {
+                return 'Le montant doit être positif';
+              }
+              if (montant > _selectedCotisation!.resteAPayer) {
+                return 'Le montant ne peut pas dépasser ${_selectedCotisation!.resteFormate}';
+              }
+              return null;
+            },
+          ),
+          SizedBox(height: 12),
+          TextFormField(
+            controller: _notesController,
+            decoration: InputDecoration(
+              labelText: 'Notes (optionnel)',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            maxLines: 2,
           ),
         ],
       ),
@@ -194,12 +665,14 @@ class _PaiementsScreenState extends ConsumerState<PaiementsScreen> {
 
   Widget _buildAdherentCard() {
     return Container(
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.whiteCard,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.borderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: AppColors.shadowLight,
             blurRadius: 4,
             offset: Offset(0, 1),
           ),
@@ -208,642 +681,43 @@ class _PaiementsScreenState extends ConsumerState<PaiementsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              '1. Choisissez un adherent',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: DropdownButtonFormField<String>(
-              value: _selectedAdherentId,
-              decoration: InputDecoration(
-                hintText: 'Choisir un adherent',
-                prefixIcon: Icon(Icons.people),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySurface,
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                filled: true,
-                fillColor: Colors.grey[50],
+                child: Icon(Icons.people_rounded, color: AppColors.primary, size: 16),
               ),
-              items: _adherents.map((adherent) {
-                return DropdownMenuItem<String>(
-                  value: adherent.id,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        adherent.nomComplet,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        '${adherent.montantContributionFormate}',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: (String? value) {
-                setState(() {
-                  if (_selectedAdherentId != value) {
-                    _selectedAdherentId = value;
-                    _selectedCotisationId = null;
-                  }
-                });
-              },
-            ),
+              SizedBox(width: 8),
+              Text(
+                'Choisissez un adhérent',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                  fontSize: 14,
+                ),
+              ),
+            ],
           ),
-          SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCotisationCard() {
-    final adherentCotisations = _cotisations
-        .where((c) => c.adherentId == _selectedAdherent!.id)
-        .toList()
-      ..sort((a, b) => b.annee.compareTo(a.annee));
-
-    if (adherentCotisations.isEmpty) {
-      return Container(
-        padding: EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.orange.shade200),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              Icons.info_outline,
-              size: 48,
-              color: Colors.orange,
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Aucune cotisation',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Colors.orange,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Cet adherent n\'a pas encore de cotisation',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context),
-              icon: Icon(Icons.add),
-              label: Text('Creer une cotisation'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: Offset(0, 1),
+          SizedBox(height: 12),
+          SearchableAdherentDropdown(
+            label: 'Rechercher un adhérent',
+            selectedAdherent: _selectedAdherent,
+            adherents: _adherents,
+            isRequired: true,
+            onChanged: (Adherent? value) {
+              setState(() {
+                if (_selectedAdherent?.id != value?.id) {
+                  _selectedAdherent = value;
+                  _selectedCotisationId = null;
+                }
+              });
+            },
           ),
         ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              '2. Choisissez une cotisation',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-          ),
-          ...adherentCotisations.map((cotisation) {
-            final estSoldee = cotisation.estSoldee;
-            final isSelected = _selectedCotisationId == cotisation.id;
-            return Container(
-              margin: EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: estSoldee ? null : () {
-                    setState(() {
-                      _selectedCotisationId = cotisation.id;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: isSelected
-                            ? Theme.of(context).primaryColor
-                            : Colors.grey[300]!,
-                        width: isSelected ? 2 : 1,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                      color: estSoldee
-                          ? Colors.grey[50]
-                          : isSelected
-                          ? Theme.of(context).primaryColor.withOpacity(0.05)
-                          : Colors.transparent,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 4,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: estSoldee
-                                ? Colors.green
-                                : cotisation.montantPaye > 0
-                                ? Colors.orange
-                                : Colors.red,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Annee ${cotisation.annee}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Text(
-                                    cotisation.montantFormate,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  Spacer(),
-                                  Container(
-                                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: estSoldee
-                                          ? Colors.green
-                                          : cotisation.montantPaye > 0
-                                          ? Colors.orange
-                                          : Colors.red,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      cotisation.statut,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Text(
-                                    'Paye: ${cotisation.montantPayeFormate}',
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  Text(
-                                    ' / ${cotisation.montantFormate}',
-                                    style: TextStyle(
-                                      color: Colors.grey[400],
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  Spacer(),
-                                  Text(
-                                    '${cotisation.pourcentagePaye.toStringAsFixed(0)}%',
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (!estSoldee)
-                          Icon(
-                            isSelected
-                                ? Icons.check_circle
-                                : Icons.circle_outlined,
-                            color: isSelected
-                                ? Theme.of(context).primaryColor
-                                : Colors.grey[400],
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-          SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPaymentCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              '3. Resume du paiement',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-          ),
-          Container(
-            margin: EdgeInsets.fromLTRB(16, 0, 16, 16),
-            padding: EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).primaryColor.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSummaryRow('Adherent', _selectedAdherent!.nomComplet),
-                _buildSummaryRow('Annee', '${_selectedCotisation!.annee}'),
-                _buildSummaryRow('Contribution', _selectedCotisation!.montantFormate),
-                _buildSummaryRow('Deja paye', _selectedCotisation!.montantPayeFormate),
-                Divider(height: 16),
-                _buildSummaryRow(
-                  'Reste a payer',
-                  _selectedCotisation!.resteFormate,
-                  valueColor: Colors.red,
-                  valueBold: true,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryRow(String label, String value, {Color? valueColor, bool valueBold = false}) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 14,
-            ),
-          ),
-          Spacer(),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor ?? Colors.black87,
-              fontWeight: valueBold ? FontWeight.bold : FontWeight.normal,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPayButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
-      child: ElevatedButton.icon(
-        onPressed: _showPaymentDialog,
-        icon: Icon(Icons.payment),
-        label: Text(
-          'Effectuer un paiement',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Theme.of(context).primaryColor,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showPaymentDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => PaymentDialog(
-        cotisation: _selectedCotisation!,
-        adherent: _selectedAdherent!,
-      ),
-    ).then((_) {
-      _loadData();
-    });
-  }
-}
-
-class PaymentDialog extends ConsumerStatefulWidget {
-  final Cotisation cotisation;
-  final Adherent adherent;
-
-  const PaymentDialog({Key? key, required this.cotisation, required this.adherent}) : super(key: key);
-
-  @override
-  ConsumerState<PaymentDialog> createState() => _PaymentDialogState();
-}
-
-class _PaymentDialogState extends ConsumerState<PaymentDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _montantController = TextEditingController();
-  final _notesController = TextEditingController();
-  String _methodePaiement = 'Espece';
-  DateTime _datePaiement = DateTime.now();
-
-  @override
-  void initState() {
-    super.initState();
-    _montantController.text = widget.cotisation.resteAPayer.toString();
-  }
-
-  @override
-  void dispose() {
-    _montantController.dispose();
-    _notesController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-                      child: Icon(
-                        Icons.payment,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Nouveau Paiement',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            '${widget.adherent.nomComplet} • Annee ${widget.cotisation.annee}',
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: Icon(Icons.close),
-                    ),
-                  ],
-                ),
-
-                SizedBox(height: 20),
-
-                // Resume
-                Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      _buildSummaryRow('Contribution', widget.cotisation.montantFormate),
-                      _buildSummaryRow('Deja paye', widget.cotisation.montantPayeFormate),
-                      Divider(),
-                      _buildSummaryRow(
-                        'Reste a payer',
-                        widget.cotisation.resteFormate,
-                        valueColor: Colors.red,
-                        valueBold: true,
-                      ),
-                    ],
-                  ),
-                ),
-
-                SizedBox(height: 20),
-
-                // Date de paiement
-                Text(
-                  'Date du paiement',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                  ),
-                ),
-                SizedBox(height: 8),
-                InkWell(
-                  onTap: _selectDate,
-                  child: Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.calendar_today, color: Colors.grey[600]),
-                        SizedBox(width: 12),
-                        Text(
-                          DateFormat('dd MMM yyyy').format(_datePaiement),
-                          style: TextStyle(fontSize: 16),
-                        ),
-                        Spacer(),
-                        Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
-                      ],
-                    ),
-                  ),
-                ),
-
-                SizedBox(height: 16),
-
-                // Methode de paiement
-                DropdownButtonFormField<String>(
-                  value: _methodePaiement,
-                  decoration: InputDecoration(
-                    labelText: 'Methode de paiement',
-                    prefixIcon: Icon(Icons.payment),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
-                  items: [
-                    DropdownMenuItem(value: 'Espece', child: Text('Espece')),
-                    DropdownMenuItem(value: 'Mobile Money', child: Text('Mobile Money')),
-                    DropdownMenuItem(value: 'Virement', child: Text('Virement')),
-                    DropdownMenuItem(value: 'Cheque', child: Text('Cheque')),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _methodePaiement = value!;
-                    });
-                  },
-                ),
-
-                SizedBox(height: 16),
-
-                // Montant
-                TextFormField(
-                  controller: _montantController,
-                  decoration: InputDecoration(
-                    labelText: 'Montant a payer (FCFA)',
-                    prefixIcon: Icon(Icons.money),
-                    hintText: 'Maximum: ${widget.cotisation.resteFormate}',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
-                  keyboardType: TextInputType.number,
-                  validator: (value) {
-                    if (value?.isEmpty == true) return 'Champ obligatoire';
-                    final montant = int.tryParse(value!);
-                    if (montant == null) return 'Montant invalide';
-                    if (montant <= 0) return 'Le montant doit etre positif';
-                    if (montant > widget.cotisation.resteAPayer) {
-                      return 'Le montant ne peut pas depasser le reste a payer';
-                    }
-                    return null;
-                  },
-                ),
-
-                SizedBox(height: 16),
-
-                // Notes
-                TextFormField(
-                  controller: _notesController,
-                  decoration: InputDecoration(
-                    labelText: 'Notes (optionnel)',
-                    prefixIcon: Icon(Icons.note),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
-                  maxLines: 3,
-                ),
-
-                SizedBox(height: 24),
-
-                // Boutons
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text('Annuler'),
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _processPayment,
-                        child: Text('Confirmer'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).primaryColor,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -856,13 +730,18 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         children: [
           Text(
             label,
-            style: TextStyle(color: Colors.grey[600]),
+            style: TextStyle(
+              color: AppColors.textSecondaryLight,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           Text(
             value,
             style: TextStyle(
-              color: valueColor ?? Colors.black,
-              fontWeight: valueBold ? FontWeight.bold : FontWeight.normal,
+              color: valueColor ?? AppColors.textPrimaryLight,
+              fontWeight: valueBold ? FontWeight.w700 : FontWeight.w600,
+              fontSize: valueBold ? 14 : 12,
             ),
           ),
         ],
@@ -870,57 +749,182 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     );
   }
 
-  Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _datePaiement,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(Duration(days: 30)),
+  Widget _buildNavigationButtons() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          if (_currentStep > 0) ...[
+            SizedBox(
+              width: 100,
+              child: OutlinedButton(
+                onPressed: _previousStep,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.arrow_back, size: 16),
+                    SizedBox(width: 4),
+                    Text('Précédent'),
+                  ],
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  side: BorderSide(color: AppColors.primary),
+                  foregroundColor: AppColors.primary,
+                  textStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ),
+            SizedBox(width: 12),
+          ],
+          SizedBox(
+            width: 100,
+            child: ElevatedButton(
+              onPressed: _currentStep < 2 && _canProceed() ? _nextStep : _processPaymentWrapper,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_currentStep < 2 ? 'Suivant' : 'Confirmer'),
+                  if (_currentStep < 2) ...[
+                    SizedBox(width: 4),
+                    Icon(Icons.arrow_forward, size: 16),
+                  ] else ...[
+                    SizedBox(width: 4),
+                    Icon(Icons.check, size: 16),
+                  ],
+                ],
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _currentStep < 2 ? AppColors.primary : AppColors.success,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                textStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+          Spacer(),
+        ],
+      ),
     );
-    if (picked != null && picked != _datePaiement) {
-      setState(() {
-        _datePaiement = picked;
-      });
+  }
+
+  bool _canProceed() {
+    switch (_currentStep) {
+      case 0:
+        return _selectedAdherent != null;
+      case 1:
+        return _selectedCotisation != null;
+      case 2:
+        return _montantController.text.isNotEmpty;
+      default:
+        return false;
     }
   }
 
-  void _processPayment() {
+  Future<void> _processPayment() async {
     if (_formKey.currentState?.validate() == true) {
-      final montant = int.parse(_montantController.text);
-      final nouveauMontantPaye = widget.cotisation.montantPaye + montant;
+      final montant = int.tryParse(_montantController.text) ?? 0;
+      
+      if (montant <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Le montant doit être positif'),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
 
-      // Créer et sauvegarder le paiement dans Firebase
+      if (montant > _selectedCotisation!.resteAPayer) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Le montant ne peut pas dépasser le reste à payer'),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
       final paiement = Paiement(
-        adherentId: widget.adherent.id,
-        annee: widget.cotisation.annee,
+        adherentId: _selectedAdherent!.id,
+        annee: _selectedCotisation!.annee,
         montantVerse: montant,
-        datePaiement: _datePaiement,
+        datePaiement: DateTime.now(),
         statut: StatutPaiement.complete,
-        methode: _convertMethodePaiement(_methodePaiement),
+        methode: MethodePaiement.espece,
         notes: _notesController.text.isNotEmpty ? _notesController.text : null,
       );
 
-      // Sauvegarder le paiement
       ref.read(paiementProvider.notifier).addPaiement(paiement);
 
-      // Mettre à jour la cotisation
-      final cotisationMaj = widget.cotisation.copyWith(
-        montantPaye: nouveauMontantPaye,
+      final cotisationMaj = _selectedCotisation!.copyWith(
+        montantPaye: _selectedCotisation!.montantPaye + montant,
         dateModification: DateTime.now(),
-        motifModification: 'Paiement de $montant FCFA par $_methodePaiement${_notesController.text.isNotEmpty ? ' - ${_notesController.text}' : ''}',
+        motifModification: 'Paiement de $montant FCFA',
       );
 
       ref.read(cotisationProvider.notifier).updateCotisation(cotisationMaj);
 
+      // Recharger les données pour mettre à jour l'interface
+      await _loadData();
+
+      // Forcer un court délai pour s'assurer que tous les caches sont bien rafraîchis
+      await Future.delayed(Duration(milliseconds: 500));
+      
+      // Recharger une deuxième fois pour être certain que tout est synchronisé
+      await _loadData();
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Paiement de $montant FCFA enregistre avec succes!'),
-          backgroundColor: Colors.green,
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Text('Paiement de $montant FCFA enregistré avec succès!'),
+            ],
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
         ),
       );
 
-      Navigator.pop(context);
+      // Reset the form after successful payment
+      setState(() {
+        _currentStep = 0;
+        _selectedAdherent = null;
+        _selectedCotisationId = null;
+        _montantController.clear();
+        _notesController.clear();
+      });
     }
+  }
+
+  void _processPaymentWrapper() {
+    _processPayment();
   }
 
   MethodePaiement _convertMethodePaiement(String methode) {

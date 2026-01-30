@@ -11,10 +11,14 @@ class RapportNotifier extends StateNotifier<AsyncValue<List<Rapport>>> {
 
   Future<void> loadRapports() async {
     try {
+      print('DEBUG: Début du chargement des rapports...');
       state = const AsyncValue.loading();
       final rapports = await FirebaseService.getAllRapports();
+      print('DEBUG: ${rapports.length} rapports chargés avec succès');
       state = AsyncValue.data(rapports);
     } catch (error, stackTrace) {
+      print('DEBUG: Erreur lors du chargement des rapports: $error');
+      print('DEBUG: Stack trace: $stackTrace');
       state = AsyncValue.error(error, stackTrace);
     }
   }

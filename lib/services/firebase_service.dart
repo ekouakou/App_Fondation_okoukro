@@ -278,6 +278,65 @@ class FirebaseService {
     }
   }
   
+  static Future<void> insertMultipleAdherents(List<Adherent> adherents) async {
+    try {
+      final batch = _firestore.batch();
+      
+      for (var adherent in adherents) {
+        final docRef = _firestore.collection(_collectionAdherents).doc(adherent.id);
+        batch.set(docRef, adherent.toFirebaseMap());
+      }
+      
+      await batch.commit();
+    } catch (e) {
+      throw Exception('Erreur lors de l\'ajout multiple des adhérents: $e');
+    }
+  }
+
+  static Future<void> clearAllCotisations() async {
+    try {
+      var snapshot = await _firestore.collection(_collectionCotisations).get();
+      for (var doc in snapshot.docs) {
+        await doc.reference.delete();
+      }
+    } catch (e) {
+      throw Exception('Erreur lors du nettoyage des cotisations: $e');
+    }
+  }
+
+  static Future<void> clearAllPaiements() async {
+    try {
+      var snapshot = await _firestore.collection(_collectionPaiements).get();
+      for (var doc in snapshot.docs) {
+        await doc.reference.delete();
+      }
+    } catch (e) {
+      throw Exception('Erreur lors du nettoyage des paiements: $e');
+    }
+  }
+
+  static Future<void> clearAllFinancialData() async {
+    try {
+      // Vider les collections dans l'ordre pour éviter les conflits de clés étrangères
+      await clearAllPaiements();
+      await clearAllCotisations();
+      await clearAllAdherents();
+    } catch (e) {
+      throw Exception('Erreur lors du nettoyage des données financières: $e');
+    }
+  }
+
+  static Future<void> clearAllAdherents() async {
+    try {
+      var snapshot = await _firestore.collection(_collectionAdherents).get();
+      for (var doc in snapshot.docs) {
+        await doc.reference.delete();
+      }
+    } catch (e) {
+      throw Exception('Erreur lors du nettoyage des adhérents: $e');
+    }
+  }
+
   static Future<void> clearAllData() async {
     try {
       var collections = [
@@ -334,15 +393,22 @@ class FirebaseService {
 
   static Future<List<Rapport>> getAllRapports() async {
     try {
+      print('DEBUG: Récupération des rapports depuis Firestore...');
       QuerySnapshot snapshot = await _firestore
           .collection(_collectionRapports)
           .orderBy('dateGeneration', descending: true)
           .get();
       
-      return snapshot.docs
-          .map((doc) => Rapport.fromFirebaseMap(doc.data() as Map<String, dynamic>, doc.id))
-          .toList();
+      print('DEBUG: ${snapshot.docs.length} documents récupérés depuis la collection rapports');
+      
+      List<Rapport> rapports = snapshot.docs.map((doc) {
+        return Rapport.fromFirebaseMap(doc.data() as Map<String, dynamic>, doc.id);
+      }).toList();
+      
+      print('DEBUG: Conversion réussie de ${rapports.length} rapports');
+      return rapports;
     } catch (e) {
+      print('DEBUG: Erreur dans getAllRapports: $e');
       throw Exception('Erreur lors de la récupération des rapports: $e');
     }
   }

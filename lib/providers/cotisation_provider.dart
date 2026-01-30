@@ -3,7 +3,10 @@ import '../models/cotisation.dart';
 import '../services/firebase_service.dart';
 
 class CotisationNotifier extends StateNotifier<AsyncValue<List<Cotisation>>> {
-  CotisationNotifier() : super(const AsyncValue.loading());
+  CotisationNotifier() : super(const AsyncValue.loading()) {
+    // Charger les cotisations automatiquement à la création
+    loadCotisations();
+  }
 
   Future<void> loadCotisations() async {
     try {
@@ -102,6 +105,16 @@ class CotisationNotifier extends StateNotifier<AsyncValue<List<Cotisation>>> {
       totaux[cotisation.annee] = (totaux[cotisation.annee] ?? 0) + cotisation.montantAnnuel as int;
     }
     return totaux;
+  }
+
+  Future<void> clearAllCotisations() async {
+    try {
+      state = const AsyncValue.loading();
+      await FirebaseService.clearAllCotisations();
+      await loadCotisations();
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+    }
   }
 
   int getTotalCotisationsAnnee(int annee) {
