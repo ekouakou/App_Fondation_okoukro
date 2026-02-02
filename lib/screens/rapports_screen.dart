@@ -61,6 +61,7 @@ class _RapportsScreenState extends ConsumerState<RapportsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Rapports'),
+        centerTitle: true,
         actions: [
           IconButton(
             icon: Icon(_useAdvancedMode ? Icons.view_list : Icons.dashboard),
@@ -82,6 +83,8 @@ class _RapportsScreenState extends ConsumerState<RapportsScreen> {
       body: _useAdvancedMode ? _buildAdvancedMode(rapportsAsync, adherentsAsync) : _buildSimpleMode(adherentsAsync, cotisationsAsync, paiementsAsync, beneficesAsync),
       floatingActionButton: FloatingActionButton(
         onPressed: _useAdvancedMode ? () => _showGenerateRapportDialog() : () => _exporterRapport(context),
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Icon(_useAdvancedMode ? Icons.add_chart : Icons.download),
         tooltip: _useAdvancedMode ? 'Générer un rapport' : 'Exporter',
       ),
@@ -273,6 +276,8 @@ class _RapportsScreenState extends ConsumerState<RapportsScreen> {
             : 'Commencez par générer votre premier rapport',
         action: FloatingActionButton(
           onPressed: _showGenerateRapportDialog,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Icon(Icons.add_chart),
         ),
       );

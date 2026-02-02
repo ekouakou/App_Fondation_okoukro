@@ -205,7 +205,7 @@ class AppTheme {
 
       // Floating Action Button Theme
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        elevation: 4,
+        elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         iconSize: 24,
       ),

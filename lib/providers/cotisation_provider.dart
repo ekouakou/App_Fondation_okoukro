@@ -107,6 +107,45 @@ class CotisationNotifier extends StateNotifier<AsyncValue<List<Cotisation>>> {
     return totaux;
   }
 
+  Future<void> ajouterCotisationGlobale(int annee, {int? montantPersonnalise}) async {
+    try {
+      // Récupérer tous les adhérents
+      final adherents = await FirebaseService.getAllAdherents();
+      
+      // Récupérer toutes les cotisations existantes pour cette année
+      final cotisationsExistantes = await FirebaseService.getAllCotisations();
+      final cotisationsAnnee = cotisationsExistantes.where((c) => c.annee == annee).toList();
+      
+      // Créer un Set des adherentId qui ont déjà une cotisation pour cette année
+      final adherentIdsAvecCotisation = cotisationsAnnee.map((c) => c.adherentId).toSet();
+      
+      // Filtrer les adhérents qui n'ont pas encore de cotisation pour cette année
+      final adherentsSansCotisation = adherents.where((a) => !adherentIdsAvecCotisation.contains(a.id)).toList();
+      
+      if (adherentsSansCotisation.isEmpty) {
+        throw Exception('Tous les adhérents ont déjà une cotisation pour l\'année $annee');
+      }
+      
+      // Créer les cotisations pour les adhérents concernés
+      final nouvellesCotisations = adherentsSansCotisation.map((adherent) {
+        return Cotisation(
+          adherentId: adherent.id,
+          montantAnnuel: montantPersonnalise ?? adherent.montantAnnuelContribution,
+          annee: annee,
+          motifModification: 'Cotisation globale - $annee',
+        );
+      }).toList();
+      
+      // Insérer toutes les cotisations en batch
+      await FirebaseService.insertMultipleCotisations(nouvellesCotisations);
+      
+      // Recharger les cotisations
+      await loadCotisations();
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+    }
+  }
+
   Future<void> clearAllCotisations() async {
     try {
       state = const AsyncValue.loading();

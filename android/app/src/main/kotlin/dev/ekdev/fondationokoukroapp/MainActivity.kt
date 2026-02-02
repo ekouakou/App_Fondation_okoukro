@@ -1,4 +1,4 @@
-package com.example.okoukro_fondation
+package dev.ekdev.fondationokoukroapp
 
 import io.flutter.embedding.android.FlutterActivity
 

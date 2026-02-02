@@ -41,6 +41,21 @@ class _SearchableAdherentDropdownState extends State<SearchableAdherentDropdown>
   }
 
   @override
+  void didUpdateWidget(SearchableAdherentDropdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Mettre à jour la liste filtrée quand la liste des adhérents change
+    if (oldWidget.adherents != widget.adherents) {
+      setState(() {
+        _filteredAdherents = widget.adherents;
+        // Si le champ de recherche n'est pas vide, appliquer le filtre
+        if (_searchController.text.isNotEmpty) {
+          _filterAdherents(_searchController.text);
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _removeOverlay();
     _searchController.dispose();

@@ -12,6 +12,7 @@ import 'dart:math' as math;
 import '../utils/constants.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/empty_state_widget.dart';
+import '../widgets/custom_tab_bar.dart';
 import 'cotisations_screen.dart';
 
 class AdherentsScreen extends ConsumerStatefulWidget {
@@ -19,10 +20,15 @@ class AdherentsScreen extends ConsumerStatefulWidget {
   ConsumerState<AdherentsScreen> createState() => _AdherentsScreenState();
 }
 
-class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
+class _AdherentsScreenState extends ConsumerState<AdherentsScreen> 
     with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  
+  // Tab controller
+  late TabController _tabController;
+  
+  // Animation controllers
   late AnimationController _fabAnimationController;
   late AnimationController _listAnimationController;
   late Animation<double> _fabScaleAnimation;
@@ -32,9 +38,12 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
   void initState() {
     super.initState();
     
+    // Initialiser le TabController
+    _tabController = TabController(length: 3, vsync: this);
+    
     // Animation pour le FloatingActionButton
     _fabAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 600),
       vsync: this,
     );
     
@@ -68,6 +77,7 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
   @override
   void dispose() {
     _searchController.dispose();
+    _tabController.dispose();
     _fabAnimationController.dispose();
     _listAnimationController.dispose();
     super.dispose();
@@ -84,6 +94,8 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
           children: [
             _buildSearchBar(),
             const SizedBox(height: 8),
+            // Menu tab global et centralisé
+            _buildTabSection(),
             Expanded(
               child: adherentsAsync.when(
                 loading: () => const LoadingWidget(),
@@ -142,7 +154,7 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
                     ),
                   ),
                 ),
-                data: (adherents) => _buildAdherentsList(adherents),
+                data: (adherents) => _buildTabContent(adherents),
               ),
             ),
           ],
@@ -412,44 +424,50 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
               },
             ),
           ),
-          // Suggestions de recherche rapide (optionnel)
-          if (_searchQuery.isEmpty) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 32,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: 4,
-                itemBuilder: (context, index) {
-                  final suggestions = ['Actifs', 'Inactifs', 'Récents', 'Favoris'];
-                  return Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text(suggestions[index]),
-                      onSelected: (isSelected) {
-                        // Implémenter la logique de filtre rapide
-                      },
-                      backgroundColor: AppColors.getSurfaceColor(ThemeService().isDarkMode),
-                      selectedColor: AppColors.primarySurface,
-                      labelStyle: TextStyle(
-                        color: AppColors.getTextColor(ThemeService().isDarkMode, type: TextType.secondary),
-                        fontSize: 12,
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(
-                          color: AppColors.getBorderColor(ThemeService().isDarkMode),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
+          
         ],
       ),
+    );
+  }
+
+  Widget _buildTabSection() {
+    return Column(
+      children: [
+        // TabBar personnalisé unifié - hauteur réduite
+        CustomTabBar(
+          height: 32, // Réduit de 40 à 32
+          controller: _tabController,
+          tabs: [
+            TabItem(
+              title: 'Tous',
+              icon: Icons.people_outline,
+            ),
+            TabItem(
+              title: 'Actifs',
+              icon: Icons.check_circle_outline,
+            ),
+            TabItem(
+              title: 'Inactifs',
+              icon: Icons.block_outlined,
+            ),
+          ],
+        ),
+        SizedBox(height: 8), // Réduit de 16 à 8
+      ],
+    );
+  }
+
+  Widget _buildTabContent(List<Adherent> adherents) {
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        // Onglet 1: Tous les adhérents
+        _buildAdherentsList(adherents),
+        // Onglet 2: Adhérents actifs uniquement
+        _buildAdherentsList(adherents.where((a) => a.estActif == true).toList()),
+        // Onglet 3: Adhérents inactifs uniquement
+        _buildAdherentsList(adherents.where((a) => a.estActif == false).toList()),
+      ],
     );
   }
 
@@ -468,6 +486,8 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
         action: _searchQuery.isEmpty
             ? FloatingActionButton(
           onPressed: _showAddAdherentDialog,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Icon(Icons.add),
         )
             : null,
@@ -530,347 +550,294 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
     final isActive = adherent.estActif;
     
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: AppColors.getSurfaceColor(isDarkMode),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isActive 
-              ? AppColors.primary.withOpacity(0.2)
+              ? AppColors.primary.withOpacity(0.15)
               : AppColors.getBorderColor(isDarkMode),
-          width: isActive ? 1.5 : 1,
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
             color: isDarkMode 
-                ? Colors.black.withOpacity(0.15)
-                : Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+                ? Colors.black.withOpacity(0.08)
+                : Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(10),
           onTap: () => _viewAdherentDetails(adherent),
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
               children: [
-                // Header avec avatar et informations principales
-                Row(
-                  children: [
-                    // Avatar amélioré
-                    Hero(
-                      tag: 'avatar_${adherent.id}',
-                      child: Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          gradient: isActive 
-                              ? AppColors.primaryGradient 
-                              : LinearGradient(
-                                  colors: [
-                                    AppColors.grey400,
-                                    AppColors.grey500,
-                                  ],
-                                ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: (isActive ? AppColors.primary : AppColors.grey400).withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: adherent.photoUrl.isNotEmpty
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: Image.network(
-                                  adherent.photoUrl,
-                                  width: 56,
-                                  height: 56,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Icon(
-                                      Icons.person,
-                                      color: Colors.white,
-                                      size: 28,
-                                    );
-                                  },
-                                ),
-                              )
-                            : Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 28,
-                              ),
+                // Avatar light et rond
+                Hero(
+                  tag: 'avatar_${adherent.id}',
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isActive 
+                          ? AppColors.primary.withOpacity(0.08)
+                          : AppColors.grey400.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isActive 
+                            ? AppColors.primary.withOpacity(0.2)
+                            : AppColors.grey400.withOpacity(0.1),
+                        width: 1,
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    // Informations principales
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Nom avec badge de statut
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  adherent.nomComplet,
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.getTextColor(isDarkMode),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Badge de statut
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
+                    child: adherent.photoUrl.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Image.network(
+                              adherent.photoUrl,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Icon(
+                                  Icons.person,
                                   color: isActive 
-                                      ? AppColors.success.withOpacity(0.1)
-                                      : AppColors.error.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: isActive 
-                                        ? AppColors.success.withOpacity(0.3)
-                                        : AppColors.error.withOpacity(0.3),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        color: isActive 
-                                            ? AppColors.success 
-                                            : AppColors.error,
-                                        borderRadius: BorderRadius.circular(3),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      isActive ? 'Actif' : 'Inactif',
-                                      style: TextStyle(
-                                        color: isActive 
-                                            ? AppColors.success 
-                                            : AppColors.error,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                                      ? AppColors.primary.withOpacity(0.6)
+                                      : AppColors.grey400.withOpacity(0.6),
+                                  size: 20,
+                                );
+                              },
+                            ),
+                          )
+                        : Icon(
+                            Icons.person,
+                            color: isActive 
+                                ? AppColors.primary.withOpacity(0.6)
+                                : AppColors.grey400.withOpacity(0.6),
+                            size: 20,
                           ),
-                          const SizedBox(height: 8),
-                          // Informations secondaires
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.phone_outlined,
-                                size: 16,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Informations principales compactes
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Nom avec badge de statut compact
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              adherent.nomComplet,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                color: AppColors.getTextColor(isDarkMode),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          // Badge de statut compact
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isActive 
+                                  ? AppColors.success.withOpacity(0.08)
+                                  : AppColors.error.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isActive 
+                                    ? AppColors.success.withOpacity(0.2)
+                                    : AppColors.error.withOpacity(0.2),
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Text(
+                              isActive ? 'Actif' : 'Inactif',
+                              style: TextStyle(
+                                color: isActive 
+                                    ? AppColors.success 
+                                    : AppColors.error,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // Informations secondaires compactes
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.phone_outlined,
+                            size: 12,
+                            color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              adherent.telephone,
+                              style: TextStyle(
+                                fontSize: 12,
                                 color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                adherent.telephone,
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                                ),
-                              ),
-                            ],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.calendar_today_outlined,
-                                size: 16,
-                                color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Adhésion: ${DateFormat('dd MMM yyyy').format(adherent.dateAdhesion)}',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.calendar_today_outlined,
+                            size: 12,
+                            color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            DateFormat('dd MMM yyyy').format(adherent.dateAdhesion),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Menu actions compact
+                PopupMenuButton<String>(
+                  onSelected: (value) => _handleMenuAction(value, adherent),
+                  icon: Icon(
+                    Icons.more_vert,
+                    size: 18,
+                    color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 4,
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'view',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.visibility_outlined,
+                            color: AppColors.getTextColor(isDarkMode),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Voir les détails',
+                            style: TextStyle(
+                              color: AppColors.getTextColor(isDarkMode),
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    // Menu actions
-                    PopupMenuButton<String>(
-                      onSelected: (value) => _handleMenuAction(value, adherent),
-                      icon: Icon(
-                        Icons.more_vert,
-                        color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.edit_outlined,
+                            color: AppColors.primary,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Modifier',
+                            style: TextStyle(
+                              color: AppColors.getTextColor(isDarkMode),
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    ),
+                    PopupMenuItem(
+                      value: 'toggle',
+                      child: Row(
+                        children: [
+                          Icon(
+                            adherent.estActif ? Icons.block_outlined : Icons.check_circle_outline,
+                            color: adherent.estActif ? AppColors.warning : AppColors.success,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            adherent.estActif ? 'Désactiver' : 'Activer',
+                            style: TextStyle(
+                              color: AppColors.getTextColor(isDarkMode),
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
-                      elevation: 8,
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: 'view',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.visibility_outlined,
-                                color: AppColors.getTextColor(isDarkMode),
-                                size: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Voir les détails',
-                                style: TextStyle(
-                                  color: AppColors.getTextColor(isDarkMode),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                    ),
+                    PopupMenuItem(
+                      value: 'add_cotisation',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.payments_outlined,
+                            color: AppColors.success,
+                            size: 18,
                           ),
-                        ),
-                        PopupMenuItem(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.edit_outlined,
-                                color: AppColors.primary,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Modifier',
-                                style: TextStyle(
-                                  color: AppColors.getTextColor(isDarkMode),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 10),
+                          Text(
+                            'Ajouter cotisation',
+                            style: TextStyle(
+                              color: AppColors.getTextColor(isDarkMode),
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
                           ),
-                        ),
-                        PopupMenuItem(
-                          value: 'toggle',
-                          child: Row(
-                            children: [
-                              Icon(
-                                adherent.estActif ? Icons.block_outlined : Icons.check_circle_outline,
-                                color: adherent.estActif ? AppColors.warning : AppColors.success,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                adherent.estActif ? 'Désactiver' : 'Activer',
-                                style: TextStyle(
-                                  color: AppColors.getTextColor(isDarkMode),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            color: AppColors.error,
+                            size: 18,
                           ),
-                        ),
-                        PopupMenuItem(
-                          value: 'add_cotisation',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.payments_outlined,
-                                color: AppColors.success,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Ajouter cotisation',
-                                style: TextStyle(
-                                  color: AppColors.getTextColor(isDarkMode),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 10),
+                          Text(
+                            'Supprimer',
+                            style: TextStyle(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
                           ),
-                        ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.delete_outline,
-                                color: AppColors.error,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Supprimer',
-                                style: TextStyle(
-                                  color: AppColors.error,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 ),
-                // Actions rapides (optionnel)
-                if (!isActive) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.toSurface(),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: AppColors.error,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Cet adhérent est actuellement inactif',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.error,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => _toggleAdherentStatus(adherent),
-                          child: Text(
-                            'Réactiver',
-                            style: TextStyle(
-                              color: AppColors.error,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -1383,7 +1350,7 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
         Adherent(
           nom: 'KOUAKOU',
           prenom: 'EDMOND',
-          telephone: '0748345289',
+          telephone: '0749345289',
           montantAnnuelContribution: 50000,
         ),
         Adherent(
@@ -1691,9 +1658,8 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
                     position: _slideAnimation,
                     child: Column(
                       children: [
-                        _buildProfileHeader(isDarkMode),
                         _buildSummaryCards(isDarkMode),
-                        _buildTabBarSection(isDarkMode),
+                        _buildTabBarSection(),
                       ],
                     ),
                   ),
@@ -1707,108 +1673,28 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
     );
   }
 
-  Widget _buildTabBarSection(bool isDarkMode) {
-    return AnimatedBuilder(
-      animation: _tabController,
-      builder: (context, _) {
-        return Container(
-          height: 40,
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: 4,
-            itemBuilder: (context, index) {
-              final isSelected = _tabController.index == index;
-              return GestureDetector(
-                onTap: () {
-                  _tabController.animateTo(index);
-                },
-                child: Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    gradient: isSelected
-                        ? AppColors.primaryGradient
-                        : null,
-                    color: !isSelected
-                        ? AppColors.getSurfaceColor(isDarkMode)
-                        : null,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: isSelected
-                        ? [
-                      BoxShadow(
-                        color: AppColors.primary.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                        : [],
-                    border: !isSelected
-                        ? Border.all(
-                      color: AppColors.getBorderColor(isDarkMode),
-                    )
-                        : null,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _getTabIcon(index),
-                        size: 16,
-                        color: isSelected
-                            ? Colors.white
-                            : AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _getTabTitle(index),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                          color: isSelected
-                              ? Colors.white
-                              : AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
+  Widget _buildTabBarSection() {
+    return CustomTabBar(
+      controller: _tabController,
+      tabs: [
+        TabItem(
+          title: 'Informations',
+          icon: Icons.person_outline,
+        ),
+        TabItem(
+          title: 'Cotisations',
+          icon: Icons.receipt_long,
+        ),
+        TabItem(
+          title: 'Paiements',
+          icon: Icons.account_balance_wallet,
+        ),
+        TabItem(
+          title: 'Historique',
+          icon: Icons.history,
+        ),
+      ],
     );
-  }
-
-  IconData _getTabIcon(int index) {
-    switch (index) {
-      case 0:
-        return Icons.person_outline;
-      case 1:
-        return Icons.receipt_long;
-      case 2:
-        return Icons.account_balance_wallet;
-      case 3:
-        return Icons.history;
-      default:
-        return Icons.help_outline;
-    }
-  }
-
-  String _getTabTitle(int index) {
-    switch (index) {
-      case 0:
-        return 'Informations';
-      case 1:
-        return 'Cotisations';
-      case 2:
-        return 'Paiements';
-      case 3:
-        return 'Historique';
-      default:
-        return '';
-    }
   }
 
   Widget _buildTabBarView() {
@@ -1841,13 +1727,6 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _buildSectionHeader(
-            '📄 Cotisations',
-            Icons.receipt_long,
-            AppColors.success,
-            isDarkMode,
-          ),
-          const SizedBox(height: 16),
           _buildAdherentCotisationsList(isDarkMode),
         ],
       ),
@@ -1955,15 +1834,16 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
 
             return Column(
               children: [
-                // Résumé des cotisations
+                // Résumé compact des cotisations
                 Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.getSurfaceColor(isDarkMode),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(6),
                     border: Border.all(
                       color: AppColors.getBorderColor(isDarkMode),
+                      width: 0.5,
                     ),
                   ),
                   child: Row(
@@ -1971,25 +1851,25 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
                       Icon(
                         Icons.info_outline,
                         color: AppColors.info,
+                        size: 14,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '${adherentCotisations.length} cotisation(s) trouvée(s)',
+                          '${adherentCotisations.length} cotisation(s)',
                           style: TextStyle(
                             color: AppColors.getTextColor(isDarkMode),
                             fontWeight: FontWeight.w500,
+                            fontSize: 11,
                           ),
                         ),
                       ),
-                      TextButton(
-                        onPressed: () => ref.refresh(cotisationProvider),
-                        child: Text(
-                          'Actualiser',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w500,
-                          ),
+                      GestureDetector(
+                        onTap: () => ref.refresh(cotisationProvider),
+                        child: Icon(
+                          Icons.refresh,
+                          color: AppColors.primary,
+                          size: 14,
                         ),
                       ),
                     ],
@@ -2026,142 +1906,164 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
           }
         });
       },
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        decoration: BoxDecoration(
+          color: AppColors.getSurfaceColor(isDarkMode),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
             color: AppColors.getBorderColor(isDarkMode),
+            width: 0.5,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: isDarkMode 
+                  ? Colors.black.withOpacity(0.03)
+                  : Colors.black.withOpacity(0.04),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
         ),
-        color: AppColors.getSurfaceColor(isDarkMode),
-        child: Column(
-          children: [
-            // Main content (always visible)
-            Padding(
-              padding: const EdgeInsets.all(16),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               child: Row(
                 children: [
+                  // Avatar compact
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
-                      color: statusColor.toSurface(),
-                      borderRadius: BorderRadius.circular(10),
+                      color: statusColor.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: statusColor.withOpacity(0.2),
+                        width: 0.5,
+                      ),
                     ),
                     child: Icon(
                       Icons.receipt_long,
-                      color: statusColor,
-                      size: 20,
+                      color: statusColor.withOpacity(0.7),
+                      size: 16,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
+                  
+                  // Informations principales
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Année ${cotisation.annee}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: AppColors.getTextColor(isDarkMode),
-                          ),
+                        // Première ligne: Année et statut
+                        Row(
+                          children: [
+                            Text(
+                              '${cotisation.annee}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                color: AppColors.getTextColor(isDarkMode),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                cotisation.statut,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 9,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          cotisation.montantFormate,
-                          style: TextStyle(
-                            color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                            fontWeight: FontWeight.w500,
-                          ),
+                        const SizedBox(height: 2),
+                        // Deuxième ligne: Montant et progression
+                        Row(
+                          children: [
+                            Text(
+                              cotisation.montantFormate,
+                              style: TextStyle(
+                                color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                                fontWeight: FontWeight.w500,
+                                fontSize: 10,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.trending_up_outlined,
+                              size: 10,
+                              color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '${cotisation.pourcentagePaye.toStringAsFixed(0)}%',
+                              style: TextStyle(
+                                color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                                fontSize: 10,
+                              ),
+                            ),
+                            if (!estSoldee) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                '(-${cotisation.resteFormate})',
+                                style: TextStyle(
+                                  color: AppColors.error,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      cotisation.statut,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
+                  
+                  // Barre de progression compacte et icône d'expansion
+                  Column(
+                    children: [
+                      // Barre de progression verticale compacte
+                      Container(
+                        width: 4,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: AppColors.getBorderColor(isDarkMode),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.bottomCenter,
+                          heightFactor: cotisation.pourcentagePaye / 100,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    isExpanded ? Icons.expand_less : Icons.expand_more,
-                    color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                      const SizedBox(height: 4),
+                      Icon(
+                        isExpanded ? Icons.expand_less : Icons.expand_more,
+                        size: 14,
+                        color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            
-            // Expanded content (visible only when expanded)
-            if (isExpanded) ...[
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'Payé: ${cotisation.montantPayeFormate}',
-                          style: TextStyle(
-                            color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '/ ${cotisation.montantFormate}',
-                          style: TextStyle(
-                            color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
-                            fontSize: 14,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${cotisation.pourcentagePaye.toStringAsFixed(0)}%',
-                          style: TextStyle(
-                            color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Barre de progression
-                    Container(
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: AppColors.getBorderColor(isDarkMode),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: cotisation.pourcentagePaye / 100,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: statusColor,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -2174,13 +2076,6 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _buildSectionHeader(
-            '💳 Historique des paiements',
-            Icons.account_balance_wallet,
-            AppColors.warning,
-            isDarkMode,
-          ),
-          const SizedBox(height: 16),
           _buildAdherentPaiementsList(isDarkMode),
         ],
       ),
@@ -2291,15 +2186,16 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
 
             return Column(
               children: [
-                // Ajouter un résumé des paiements
+                // Résumé compact des paiements
                 Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.getSurfaceColor(isDarkMode),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(6),
                     border: Border.all(
                       color: AppColors.getBorderColor(isDarkMode),
+                      width: 0.5,
                     ),
                   ),
                   child: Row(
@@ -2307,25 +2203,25 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
                       Icon(
                         Icons.info_outline,
                         color: AppColors.info,
+                        size: 14,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '${adherentPaiements.length} paiement(s) trouvé(s)',
+                          '${adherentPaiements.length} paiement(s)',
                           style: TextStyle(
                             color: AppColors.getTextColor(isDarkMode),
                             fontWeight: FontWeight.w500,
+                            fontSize: 11,
                           ),
                         ),
                       ),
-                      TextButton(
-                        onPressed: () => ref.refresh(paiementProvider),
-                        child: Text(
-                          'Actualiser',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w500,
-                          ),
+                      GestureDetector(
+                        onTap: () => ref.refresh(paiementProvider),
+                        child: Icon(
+                          Icons.refresh,
+                          color: AppColors.primary,
+                          size: 14,
                         ),
                       ),
                     ],
@@ -2345,18 +2241,19 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
 
   Widget _buildPaiementCard(Paiement paiement, bool isDarkMode) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
         color: AppColors.getSurfaceColor(isDarkMode),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: AppColors.getBorderColor(isDarkMode),
+          width: 0.5,
         ),
         boxShadow: [
           BoxShadow(
             color: isDarkMode 
-                ? AppColors.black.withOpacity(0.02)
-                : AppColors.black.withOpacity(0.08),
+                ? Colors.black.withOpacity(0.03)
+                : Colors.black.withOpacity(0.04),
             blurRadius: 2,
             offset: const Offset(0, 1),
           ),
@@ -2365,147 +2262,123 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.success.toSurface(),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.payment,
-                        color: AppColors.success,
-                        size: 20,
-                      ),
+                // Avatar compact
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.success.withOpacity(0.2),
+                      width: 0.5,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                  child: Icon(
+                    Icons.payment,
+                    color: AppColors.success.withOpacity(0.7),
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                
+                // Informations principales
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Première ligne: Année et montant
+                      Row(
                         children: [
                           Text(
-                            'Année ${paiement.annee}',
+                            '${paiement.annee}',
                             style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
                               color: AppColors.getTextColor(isDarkMode),
                             ),
                           ),
-                          Text(
-                            widget.adherent.nomComplet,
-                            style: TextStyle(
-                              color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                              fontSize: 14,
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              paiement.montantFormate,
+                              style: TextStyle(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 10,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppColors.success,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        paiement.montantFormate,
-                        style: const TextStyle(
-                          color: AppColors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppColors.info.toSurface(),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(
-                        Icons.calendar_today,
-                        size: 14,
-                        color: AppColors.info,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      DateFormat('dd MMM yyyy').format(paiement.datePaiement),
-                      style: TextStyle(
-                        color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppColors.warning.toSurface(),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(
-                        Icons.payment,
-                        size: 14,
-                        color: AppColors.warning,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      paiement.methodeFormate,
-                      style: TextStyle(
-                        color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-                if (paiement.notes != null && paiement.notes!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isDarkMode 
-                          ? AppColors.white.withOpacity(0.05)
-                          : AppColors.grey50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppColors.getBorderColor(isDarkMode).withOpacity(0.5),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.note,
-                          size: 16,
-                          color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            paiement.notes!,
+                      const SizedBox(height: 2),
+                      // Deuxième ligne: Date et méthode
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today_outlined,
+                            size: 10,
+                            color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            DateFormat('dd MMM yyyy').format(paiement.datePaiement),
                             style: TextStyle(
                               color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                              fontSize: 13,
-                              fontStyle: FontStyle.italic,
+                              fontSize: 10,
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.credit_card_outlined,
+                            size: 10,
+                            color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                          ),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              paiement.methodeFormate,
+                              style: TextStyle(
+                                color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                                fontSize: 10,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Notes compactes si présentes
+                if (paiement.notes != null && paiement.notes!.isNotEmpty) ...[
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: AppColors.info.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.note_outlined,
+                      size: 12,
+                      color: AppColors.info.withOpacity(0.7),
                     ),
                   ),
+                ] else ...[
+                  const SizedBox(width: 20),
                 ],
               ],
             ),
@@ -2522,13 +2395,6 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _buildSectionHeader(
-            '📈 Historique des activités',
-            Icons.history,
-            AppColors.info,
-            isDarkMode,
-          ),
-          const SizedBox(height: 16),
           _buildHistoriqueItems(isDarkMode),
         ],
       ),
@@ -2583,117 +2449,216 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
   }
 
   Widget _buildHistoriqueItems(bool isDarkMode) {
-    final historiqueItems = [
+    // Simuler des données d'audit trail pour l'utilisateur connecté
+    final auditTrailItems = [
       {
-        'date': '15 Janvier 2024',
-        'action': 'Paiement cotisation',
-        'description': 'Cotisation annuelle 2024',
-        'amount': '50 000 FCFA',
+        'timestamp': DateTime.now().subtract(Duration(hours: 2)),
+        'action': 'create',
+        'entity': 'Adhérent',
+        'description': 'Création de l\'adhérent KOFFI YAO',
+        'details': 'Nouvel adhérent ajouté avec succès',
+        'icon': Icons.person_add,
         'color': AppColors.success,
       },
       {
-        'date': '10 Janvier 2024',
-        'action': 'Mise à jour profil',
-        'description': 'Modification des informations personnelles',
-        'amount': '',
+        'timestamp': DateTime.now().subtract(Duration(hours: 5)),
+        'action': 'update',
+        'entity': 'Cotisation',
+        'description': 'Modification de la cotisation 2024',
+        'details': 'Montant annuel mis à jour: 50 000 FCFA',
+        'icon': Icons.edit,
         'color': AppColors.info,
       },
       {
-        'date': '20 Décembre 2023',
-        'action': 'Paiement cotisation',
-        'description': 'Cotisation annuelle 2023',
-        'amount': '50 000 FCFA',
+        'timestamp': DateTime.now().subtract(Duration(days: 1)),
+        'action': 'payment',
+        'entity': 'Paiement',
+        'description': 'Enregistrement d\'un paiement',
+        'details': 'Paiement de 25 000 FCFA reçu',
+        'icon': Icons.payment,
         'color': AppColors.success,
       },
       {
-        'date': '15 Novembre 2023',
-        'action': 'Inscription',
-        'description': 'Nouvel adhérent',
-        'amount': '',
+        'timestamp': DateTime.now().subtract(Duration(days: 2)),
+        'action': 'delete',
+        'entity': 'Paiement',
+        'description': 'Suppression d\'un paiement erroné',
+        'details': 'Paiement de 10 000 FCFA supprimé',
+        'icon': Icons.delete,
+        'color': AppColors.error,
+      },
+      {
+        'timestamp': DateTime.now().subtract(Duration(days: 3)),
+        'action': 'create',
+        'entity': 'Cotisation',
+        'description': 'Création d\'une nouvelle cotisation',
+        'details': 'Cotisation 2024 créée pour l\'adhérent',
+        'icon': Icons.receipt_long,
         'color': AppColors.primary,
       },
     ];
 
     return Column(
-      children: historiqueItems.map((item) {
-        final color = item['color'] as Color;
+      children: auditTrailItems.asMap().entries.map((entry) {
+        final index = entry.key;
+        final item = entry.value;
+        final timestamp = item['timestamp'] as DateTime;
         final action = item['action'] as String;
+        final entity = item['entity'] as String;
         final description = item['description'] as String;
-        final date = item['date'] as String;
-        final amount = item['amount'] as String;
+        final details = item['details'] as String;
+        final icon = item['icon'] as IconData;
+        final color = item['color'] as Color;
+        
+        // Formatter le timestamp
+        final now = DateTime.now();
+        final difference = now.difference(timestamp);
+        String timeAgo;
+        
+        if (difference.inMinutes < 1) {
+          timeAgo = 'À l\'instant';
+        } else if (difference.inMinutes < 60) {
+          timeAgo = 'Il y a ${difference.inMinutes} min';
+        } else if (difference.inHours < 24) {
+          timeAgo = 'Il y a ${difference.inHours}h';
+        } else if (difference.inDays < 7) {
+          timeAgo = 'Il y a ${difference.inDays}j';
+        } else {
+          timeAgo = DateFormat('dd MMM yyyy', 'fr').format(timestamp);
+        }
         
         return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.getSurfaceColor(isDarkMode),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: AppColors.getBorderColor(isDarkMode),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDarkMode 
-                    ? AppColors.black.withOpacity(0.1)
-                    : AppColors.shadowLight.withOpacity(0.5),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+          margin: const EdgeInsets.only(bottom: 16),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.history,
-                  color: color,
-                  size: 16,
-                ),
+              // Ligne de connexion
+              Column(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: color.withOpacity(0.3),
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: color,
+                      size: 20,
+                    ),
+                  ),
+                  if (index < auditTrailItems.length - 1)
+                    Container(
+                      width: 2,
+                      height: 60,
+                      color: AppColors.getBorderColor(isDarkMode).withOpacity(0.3),
+                    ),
+                ],
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
+              // Carte d'activité
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      action,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.getTextColor(isDarkMode),
-                      ),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.getSurfaceColor(isDarkMode),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: color.withOpacity(0.2),
+                      width: 1,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: TextStyle(
-                        color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
-                        fontSize: 12,
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      date,
-                      style: TextStyle(
-                        color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
-                        fontSize: 11,
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // En-tête avec action et entité
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _getActionLabel(action),
+                              style: TextStyle(
+                                color: color,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.getBorderColor(isDarkMode).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              entity,
+                              style: TextStyle(
+                                color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            timeAgo,
+                            style: TextStyle(
+                              color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              if (amount.isNotEmpty)
-                Text(
-                  amount,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: color,
+                      const SizedBox(height: 12),
+                      // Description
+                      Text(
+                        description,
+                        style: TextStyle(
+                          color: AppColors.getTextColor(isDarkMode),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      // Détails
+                      Text(
+                        details,
+                        style: TextStyle(
+                          color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Timestamp complet
+                      Text(
+                        DateFormat('dd MMM yyyy à HH:mm', 'fr').format(timestamp),
+                        style: TextStyle(
+                          color: AppColors.getTextColor(isDarkMode, type: TextType.tertiary),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ),
             ],
           ),
         );
@@ -2701,39 +2666,52 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
     );
   }
 
+  String _getActionLabel(String action) {
+    switch (action) {
+      case 'create':
+        return 'Création';
+      case 'update':
+        return 'Modification';
+      case 'delete':
+        return 'Suppression';
+      case 'payment':
+        return 'Paiement';
+      default:
+        return action;
+    }
+  }
+
   Widget _buildSliverAppBar(bool isDarkMode) {
     return SliverAppBar(
-      expandedHeight: 120,
+      expandedHeight: 50,
       floating: false,
       pinned: true,
       backgroundColor: AppColors.getPureAppBarBackground(isDarkMode),
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       flexibleSpace: FlexibleSpaceBar(
+        background: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDarkMode 
+                  ? [AppColors.pureBlack, AppColors.pureBlack]
+                  : [AppColors.primary.withOpacity(0.05), Colors.transparent],
+            ),
+          ),
+        ),
         title: Text(
           widget.adherent.nomComplet,
           style: TextStyle(
             color: isDarkMode ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.bold,
             fontSize: 20,
           ),
         ),
-        titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
+        centerTitle: true,
+        titlePadding: const EdgeInsets.only(bottom: 16),
       ),
-      actions: [
-        IconButton(
-          icon: Icon(Icons.edit, color: isDarkMode ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
-          onPressed: () {
-            // TODO: Implémenter l'édition
-          },
-        ),
-        IconButton(
-          icon: Icon(Icons.more_vert, color: isDarkMode ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
-          onPressed: () {
-            // TODO: Menu options
-          },
-        ),
-      ],
     );
   }
   Widget _buildProfileHeader(bool isDarkMode) {
@@ -2870,77 +2848,164 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
   }
 
   Widget _buildSummaryCards(bool isDarkMode) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _buildSummaryCard(
-                  'Cotisations', 
-                  '${math.Random().nextInt(50) + 10}',
-                  AppColors.success, 
-                  Icons.receipt_long,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSummaryCard(
-                  'Montant Total', 
-                  '${(math.Random().nextInt(500) + 100)}000 FCFA',
-                  AppColors.primary, 
-                  Icons.account_balance_wallet,
-                ),
-              ),
-            ],
+    return Consumer(
+      builder: (context, ref, child) {
+        // Récupérer les vraies données de l'adhérent
+        final cotisationsAsync = ref.watch(cotisationProvider);
+        final paiementsAsync = ref.watch(paiementProvider);
+        
+        return cotisationsAsync.when(
+          loading: () => Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            child: const Center(child: CircularProgressIndicator()),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildSummaryCard(
-                  'Dernier Paiement', 
-                  'Il y a ${math.Random().nextInt(30) + 1} jours',
-                  AppColors.warning, 
-                  Icons.history,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSummaryCard(
-                  'Statut', 
-                  widget.adherent.estActif ? 'Actif' : 'Inactif',
-                  widget.adherent.estActif ? AppColors.success : AppColors.error, 
-                  widget.adherent.estActif ? Icons.check_circle : Icons.cancel,
-                ),
-              ),
-            ],
+          error: (_, __) => Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            child: const Center(child: Text('Erreur de chargement')),
           ),
-          const SizedBox(height: 16),
-        ],
-      ),
+          data: (cotisations) {
+            // Calculer les vraies statistiques
+            final adherentCotisations = cotisations.where((c) => c.adherentId == widget.adherent.id).toList();
+            final totalCotisations = adherentCotisations.fold<int>(0, (sum, c) => sum + c.montantAnnuel);
+            final totalPaye = adherentCotisations.fold<int>(0, (sum, c) => sum + c.montantPaye);
+            
+            // Calculer les totaux de l'association
+            final totalCotisationsAssociation = cotisations.fold<int>(0, (sum, c) => sum + c.montantAnnuel);
+            final totalPayeAssociation = cotisations.fold<int>(0, (sum, c) => sum + c.montantPaye);
+            
+            // Calculer le bénéfice estimé de l'association (paiements - dépenses estimées)
+            // Pour l'exemple, on considère que 70% des cotisations sont des bénéfices nets
+            final beneficeEstime = (totalPayeAssociation * 0.7).round();
+            
+            // Calculer les 3 métriques
+            final tauxParticipation = totalCotisations > 0 
+                ? (totalPaye / totalCotisations * 100)
+                : 0.0;
+                
+            final contributionBenefice = beneficeEstime > 0
+                ? (totalPaye / beneficeEstime * 100)
+                : 0.0;
+                
+            final partBudgetTotal = totalCotisationsAssociation > 0
+                ? (totalCotisations / totalCotisationsAssociation * 100)
+                : 0.0;
+            
+            // Calculer le dernier paiement (non utilisé actuellement)
+            // DateTime? dernierPaiement;
+            // if (paiementsAsync.hasValue) {
+            //   final adherentPaiements = paiementsAsync.value!
+            //       .where((p) => p.adherentId == widget.adherent.id)
+            //       .toList();
+            //   if (adherentPaiements.isNotEmpty) {
+            //     dernierPaiement = adherentPaiements
+            //         .map((p) => p.datePaiement)
+            //         .reduce((a, b) => a.isAfter(b) ? a : b);
+            //   }
+            // }
+            
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildSummaryCard(
+                          'Cotisations', 
+                          '${adherentCotisations.length} / ${NumberFormat.currency(locale: 'fr_FR', symbol: '').format(totalCotisations)}',
+                          AppColors.success, 
+                          Icons.receipt_long,
+                          Colors.green[50]!,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildSummaryCard(
+                          'Taux Participation', 
+                          '${tauxParticipation.toStringAsFixed(1)}%',
+                          tauxParticipation >= 100 
+                              ? AppColors.success 
+                              : tauxParticipation >= 50 
+                                  ? AppColors.warning 
+                                  : AppColors.error, 
+                          Icons.person_outline,
+                          tauxParticipation >= 100 
+                              ? Colors.green[50]!
+                              : tauxParticipation >= 50 
+                                  ? Colors.orange[50]!
+                                  : Colors.red[50]!,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildSummaryCard(
+                          'Contribution Bénéfice', 
+                          '${contributionBenefice.toStringAsFixed(1)}%',
+                          contributionBenefice >= 10 
+                              ? AppColors.success 
+                              : contributionBenefice >= 5 
+                                  ? AppColors.warning 
+                                  : AppColors.error, 
+                          Icons.trending_up,
+                          contributionBenefice >= 10 
+                              ? Colors.green[50]!
+                              : contributionBenefice >= 5 
+                                  ? Colors.orange[50]!
+                                  : Colors.red[50]!,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildSummaryCard(
+                          'Part Budget Total', 
+                          '${partBudgetTotal.toStringAsFixed(1)}%',
+                          partBudgetTotal >= 5 
+                              ? AppColors.primary 
+                              : partBudgetTotal >= 2 
+                                  ? AppColors.warning 
+                                  : AppColors.error, 
+                          Icons.pie_chart,
+                          partBudgetTotal >= 5 
+                              ? Colors.blue[50]!
+                              : partBudgetTotal >= 2 
+                                  ? Colors.orange[50]!
+                                  : Colors.red[50]!,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, Color color, IconData icon) {
+  Widget _buildSummaryCard(String title, String value, Color color, IconData icon, Color cardColor) {
     final isDarkMode = _themeService.isDarkMode;
     
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.getSurfaceColor(isDarkMode),
-        borderRadius: BorderRadius.circular(16),
+        color: cardColor,
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: AppColors.getBorderColor(isDarkMode),
+          color: color.withOpacity(0.2),
+          width: 0.8,
         ),
         boxShadow: [
           BoxShadow(
-            color: isDarkMode 
-                ? AppColors.black.withOpacity(0.02)
-                : AppColors.black.withOpacity(0.08),
-            blurRadius: 2,
+            color: color.withOpacity(0.08),
+            blurRadius: 4,
             offset: const Offset(0, 1),
           ),
         ],
@@ -2951,17 +3016,17 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: color.toSurface(),
-                  borderRadius: BorderRadius.circular(10),
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: color, size: 20),
+                child: Icon(icon, color: color, size: 16),
               ),
               const Spacer(),
               Container(
-                width: 8,
-                height: 8,
+                width: 6,
+                height: 6,
                 decoration: BoxDecoration(
                   color: color,
                   shape: BoxShape.circle,
@@ -2969,23 +3034,27 @@ class _AdherentDetailsScreenState extends ConsumerState<AdherentDetailsScreen>
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           Text(
             value,
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: FontWeight.bold,
               color: color,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             title,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 10,
               color: AppColors.getTextColor(isDarkMode, type: TextType.secondary),
               fontWeight: FontWeight.w500,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

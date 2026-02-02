@@ -62,6 +62,8 @@ class _BeneficesScreenState extends ConsumerState<BeneficesScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddBeneficeDialog,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Icon(Icons.add),
       ),
     );
@@ -106,6 +108,8 @@ class _BeneficesScreenState extends ConsumerState<BeneficesScreen> {
         subtitle: 'Ajoutez des bénéfices pour l\'année $anneeSelectionnee',
         action: FloatingActionButton(
           onPressed: _showAddBeneficeDialog,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Icon(Icons.add),
         ),
       );
@@ -364,6 +368,7 @@ class BeneficeDetailsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text('Détails du bénéfice'),
+        centerTitle: true,
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(16),

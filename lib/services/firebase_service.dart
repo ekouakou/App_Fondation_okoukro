@@ -293,6 +293,21 @@ class FirebaseService {
     }
   }
 
+  static Future<void> insertMultipleCotisations(List<Cotisation> cotisations) async {
+    try {
+      final batch = _firestore.batch();
+      
+      for (var cotisation in cotisations) {
+        final docRef = _firestore.collection(_collectionCotisations).doc(cotisation.id);
+        batch.set(docRef, cotisation.toFirebaseMap());
+      }
+      
+      await batch.commit();
+    } catch (e) {
+      throw Exception('Erreur lors de l\'ajout multiple des cotisations: $e');
+    }
+  }
+
   static Future<void> clearAllCotisations() async {
     try {
       var snapshot = await _firestore.collection(_collectionCotisations).get();
