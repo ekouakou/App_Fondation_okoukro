@@ -160,57 +160,46 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
           ],
         ),
       ),
-      floatingActionButton: AnimatedBuilder(
-        animation: _fabAnimationController,
-        builder: (context, child) {
-          return Transform.scale(
-            scale: _fabScaleAnimation.value,
-            child: SlideTransition(
-              position: _fabSlideAnimation,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: FloatingActionButton.extended(
-                  onPressed: _showAddAdherentDialog,
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.add,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  label: const Text(
-                    'Ajouter',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  backgroundColor: AppColors.primary,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-              ),
+      floatingActionButton: _tabController.index != 2 ? Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
-          );
-        },
-      ),
+          ],
+        ),
+        child: FloatingActionButton.extended(
+          onPressed: _showAddAdherentDialog,
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.add,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          label: const Text(
+            'Ajouter',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+          backgroundColor: AppColors.primary,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ) : null,
     );
   }
 
@@ -483,7 +472,7 @@ class _AdherentsScreenState extends ConsumerState<AdherentsScreen>
         subtitle: _searchQuery.isEmpty
             ? 'Ajoutez votre premier adhérent'
             : 'Essayez une autre recherche',
-        action: _searchQuery.isEmpty
+        action: _searchQuery.isEmpty && _tabController.index != 2
             ? FloatingActionButton(
           onPressed: _showAddAdherentDialog,
           elevation: 0,
